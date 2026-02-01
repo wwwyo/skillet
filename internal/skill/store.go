@@ -123,31 +123,17 @@ func (s *Store) GetResolved() ([]*Skill, error) {
 
 // getGlobalSkills loads skills from global directories.
 func (s *Store) getGlobalSkills() ([]*Skill, error) {
-	var skills []*Skill
-
-	// Default skills (directly under skills/, excluding optional/)
 	skillsDir, err := s.cfg.SkillsDir(s.fs, "")
 	if err != nil {
 		return nil, err
 	}
-	defaultSkills, err := s.loader.LoadAllInDirExcluding(skillsDir, ScopeGlobal, CategoryDefault, config.OptionalDir)
-	if err != nil {
-		return nil, err
-	}
-	skills = append(skills, defaultSkills...)
 
-	// Optional skills
-	optionalDir, err := s.cfg.SkillsDir(s.fs, config.OptionalDir)
+	defaultSkills, optionalSkills, err := s.loader.LoadAllInDir(skillsDir, ScopeGlobal)
 	if err != nil {
 		return nil, err
 	}
-	optionalSkills, err := s.loader.LoadAllInDir(optionalDir, ScopeGlobal, CategoryOptional)
-	if err != nil {
-		return nil, err
-	}
-	skills = append(skills, optionalSkills...)
 
-	return skills, nil
+	return append(defaultSkills, optionalSkills...), nil
 }
 
 // getProjectSkills loads skills from project directories.
@@ -156,25 +142,13 @@ func (s *Store) getProjectSkills() ([]*Skill, error) {
 		return nil, nil
 	}
 
-	var skills []*Skill
-
-	// Default skills (directly under skills/, excluding optional/)
 	skillsDir := config.ProjectSkillsDir(s.projectRoot, s.fs, "")
-	defaultSkills, err := s.loader.LoadAllInDirExcluding(skillsDir, ScopeProject, CategoryDefault, config.OptionalDir)
+	defaultSkills, optionalSkills, err := s.loader.LoadAllInDir(skillsDir, ScopeProject)
 	if err != nil {
 		return nil, err
 	}
-	skills = append(skills, defaultSkills...)
 
-	// Optional skills
-	optionalDir := config.ProjectSkillsDir(s.projectRoot, s.fs, config.OptionalDir)
-	optionalSkills, err := s.loader.LoadAllInDir(optionalDir, ScopeProject, CategoryOptional)
-	if err != nil {
-		return nil, err
-	}
-	skills = append(skills, optionalSkills...)
-
-	return skills, nil
+	return append(defaultSkills, optionalSkills...), nil
 }
 
 // FindInScope finds a skill by name in a specific scope.

@@ -104,6 +104,16 @@ func ProjectAgentsDir(projectRoot string, fsys fs.System) string {
 	return fsys.Join(projectRoot, AgentsDir)
 }
 
+// GetAgentsDir returns the agents directory for the given scope.
+// If projectRoot is non-empty, returns the project agents directory.
+// Otherwise, returns the global agents directory.
+func (c *Config) GetAgentsDir(fsys fs.System, projectRoot string) (string, error) {
+	if projectRoot != "" {
+		return ProjectAgentsDir(projectRoot, fsys), nil
+	}
+	return c.AgentsDir(fsys)
+}
+
 // ProjectSkillsDir returns the path to the project skills directory.
 func ProjectSkillsDir(projectRoot string, fsys fs.System, category string) string {
 	return fsys.Join(projectRoot, AgentsDir, SkillsDir, category)

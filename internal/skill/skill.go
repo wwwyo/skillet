@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/wwwyo/skillet/internal/fs"
 )
 
 // Scope represents the scope level of a skill.
@@ -115,4 +117,40 @@ func ValidateName(name string) error {
 	}
 
 	return nil
+}
+
+// maxValidationDepth is the maximum depth to search for SKILL.md files.
+const maxValidationDepth = 5
+
+// IsValidSkillDir checks if a directory is a valid skill directory.
+// A valid skill directory contains SKILL.md either directly or in a subdirectory.
+func IsValidSkillDir(fsys fs.System, dir string) bool {
+	return isValidSkillDirWithDepth(fsys, dir, 0)
+}
+
+func isValidSkillDirWithDepth(fsys fs.System, dir string, depth int) bool {
+	if depth > maxValidationDepth {
+		return false
+	}
+
+	// Check current directory
+	if fsys.Exists(fsys.Join(dir, "SKILL.md")) {
+		return true
+	}
+
+	// Check subdirectories recursively
+	entries, err := fsys.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			if isValidSkillDirWithDepth(fsys, fsys.Join(dir, entry.Name()), depth+1) {
+				return true
+			}
+		}
+	}
+
+	return false
 }

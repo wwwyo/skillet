@@ -106,7 +106,7 @@ description: "  spaced description  "
 			tt.setup(mock)
 			loader := NewLoader(mock)
 
-			skill, err := loader.Load(tt.dir)
+			skill, err := loader.Load(tt.dir, ScopeGlobal, CategoryDefault)
 
 			if tt.wantErr {
 				if err == nil {
@@ -179,7 +179,7 @@ name: file-skill
 			tt.setup(mock)
 			loader := NewLoader(mock)
 
-			skill, err := loader.LoadFromPath(tt.path)
+			skill, err := loader.LoadFromPath(tt.path, ScopeGlobal, CategoryDefault)
 
 			if tt.wantErr {
 				if err == nil {
@@ -200,7 +200,7 @@ name: file-skill
 	}
 }
 
-func TestLoaderIsValidSkillDir(t *testing.T) {
+func TestIsValidSkillDir(t *testing.T) {
 	tests := []struct {
 		name  string
 		setup func(*fs.MockSystem)
@@ -241,9 +241,8 @@ name: valid
 		t.Run(tt.name, func(t *testing.T) {
 			mock := fs.NewMock()
 			tt.setup(mock)
-			loader := NewLoader(mock)
 
-			got := loader.IsValidSkillDir(tt.dir)
+			got := IsValidSkillDir(mock, tt.dir)
 			if got != tt.want {
 				t.Errorf("IsValidSkillDir() = %v, want %v", got, tt.want)
 			}
@@ -363,93 +362,90 @@ name: linked-skill
 }
 
 func TestLoaderLoadAllInDir(t *testing.T) {
-	tests := []struct {
-		name      string
-		setup     func(*fs.MockSystem)
-		dir       string
-		scope     Scope
-		category  Category
-		wantNames []string
-		wantErr   bool
-	}{
-		{
-			name: "load all skills with scope and category",
-			setup: func(m *fs.MockSystem) {
-				m.Dirs["/skills"] = true
-				m.Dirs["/skills/skill-a"] = true
-				m.Files["/skills/skill-a/SKILL.md"] = []byte(`---
-name: skill-a
----
-`)
-				m.Dirs["/skills/skill-b"] = true
-				m.Files["/skills/skill-b/SKILL.md"] = []byte(`---
-name: skill-b
----
-`)
-			},
-			dir:       "/skills",
-			scope:     ScopeGlobal,
-			category:  CategoryDefault,
-			wantNames: []string{"skill-a", "skill-b"},
-			wantErr:   false,
-		},
-		{
-			name: "skip invalid skills",
-			setup: func(m *fs.MockSystem) {
-				m.Dirs["/skills"] = true
-				m.Dirs["/skills/valid"] = true
-				m.Files["/skills/valid/SKILL.md"] = []byte(`---
-name: valid
----
-`)
-				m.Dirs["/skills/invalid"] = true
-				m.Files["/skills/invalid/SKILL.md"] = []byte(`No frontmatter`)
-			},
-			dir:       "/skills",
-			scope:     ScopeProject,
-			category:  CategoryOptional,
-			wantNames: []string{"valid"},
-			wantErr:   false,
-		},
-	}
+	t.Run("load default and optional skills", func(t *testing.T) {
+		mock := fs.NewMock()
+		mock.Dirs["/skills"] = true
+		mock.Dirs["/skills/skill-a"] = true
+		mock.Files["/skills/skill-a/SKILL.md"] = []byte("---\nname: skill-a\n---\n")
+		mock.Dirs["/skills/skill-b"] = true
+		mock.Files["/skills/skill-b/SKILL.md"] = []byte("---\nname: skill-b\n---\n")
+		mock.Dirs["/skills/optional"] = true
+		mock.Dirs["/skills/optional/skill-c"] = true
+		mock.Files["/skills/optional/skill-c/SKILL.md"] = []byte("---\nname: skill-c\n---\n")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mock := fs.NewMock()
-			tt.setup(mock)
-			loader := NewLoader(mock)
+		loader := NewLoader(mock)
+		defaultSkills, optionalSkills, err := loader.LoadAllInDir("/skills", ScopeGlobal)
 
-			skills, err := loader.LoadAllInDir(tt.dir, tt.scope, tt.category)
+		if err != nil {
+			t.Fatalf("LoadAllInDir() error = %v", err)
+		}
 
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("LoadAllInDir() expected error, got nil")
-				}
-				return
+		if len(defaultSkills) != 2 {
+			t.Errorf("LoadAllInDir() default skills = %d, want 2", len(defaultSkills))
+		}
+		if len(optionalSkills) != 1 {
+			t.Errorf("LoadAllInDir() optional skills = %d, want 1", len(optionalSkills))
+		}
+
+		// Verify scope and category are set correctly
+		for _, s := range defaultSkills {
+			if s.Scope != ScopeGlobal {
+				t.Errorf("default skill scope = %v, want %v", s.Scope, ScopeGlobal)
 			}
-
-			if err != nil {
-				t.Errorf("LoadAllInDir() unexpected error: %v", err)
-				return
+			if s.Category != CategoryDefault {
+				t.Errorf("default skill category = %v, want %v", s.Category, CategoryDefault)
 			}
-
-			var gotNames []string
-			for _, s := range skills {
-				gotNames = append(gotNames, s.Name)
-				// Verify scope and category are set
-				if s.Scope != tt.scope {
-					t.Errorf("LoadAllInDir() skill.Scope = %v, want %v", s.Scope, tt.scope)
-				}
-				if s.Category != tt.category {
-					t.Errorf("LoadAllInDir() skill.Category = %v, want %v", s.Category, tt.category)
-				}
+		}
+		for _, s := range optionalSkills {
+			if s.Scope != ScopeGlobal {
+				t.Errorf("optional skill scope = %v, want %v", s.Scope, ScopeGlobal)
 			}
-
-			if !stringSliceEqual(gotNames, tt.wantNames) {
-				t.Errorf("LoadAllInDir() names = %v, want %v", gotNames, tt.wantNames)
+			if s.Category != CategoryOptional {
+				t.Errorf("optional skill category = %v, want %v", s.Category, CategoryOptional)
 			}
-		})
-	}
+		}
+	})
+
+	t.Run("skip invalid skills", func(t *testing.T) {
+		mock := fs.NewMock()
+		mock.Dirs["/skills"] = true
+		mock.Dirs["/skills/valid"] = true
+		mock.Files["/skills/valid/SKILL.md"] = []byte("---\nname: valid\n---\n")
+		mock.Dirs["/skills/invalid"] = true
+		mock.Files["/skills/invalid/SKILL.md"] = []byte("No frontmatter")
+
+		loader := NewLoader(mock)
+		defaultSkills, _, err := loader.LoadAllInDir("/skills", ScopeGlobal)
+
+		if err != nil {
+			t.Fatalf("LoadAllInDir() error = %v", err)
+		}
+
+		if len(defaultSkills) != 1 {
+			t.Errorf("LoadAllInDir() default skills = %d, want 1", len(defaultSkills))
+		}
+	})
+
+	t.Run("no optional directory", func(t *testing.T) {
+		mock := fs.NewMock()
+		mock.Dirs["/skills"] = true
+		mock.Dirs["/skills/skill-a"] = true
+		mock.Files["/skills/skill-a/SKILL.md"] = []byte("---\nname: skill-a\n---\n")
+
+		loader := NewLoader(mock)
+		defaultSkills, optionalSkills, err := loader.LoadAllInDir("/skills", ScopeProject)
+
+		if err != nil {
+			t.Fatalf("LoadAllInDir() error = %v", err)
+		}
+
+		if len(defaultSkills) != 1 {
+			t.Errorf("LoadAllInDir() default skills = %d, want 1", len(defaultSkills))
+		}
+		if len(optionalSkills) != 0 {
+			t.Errorf("LoadAllInDir() optional skills = %d, want 0", len(optionalSkills))
+		}
+	})
 }
 
 // Helper functions

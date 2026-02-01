@@ -103,11 +103,11 @@ func initializeGlobal(a *app, customPath string, skipPrompts bool) error {
 	}
 
 	// Ask about migrating existing skills
-	if err := runMigrate(a, cfg, MigrateOptions{
-		SkipPrompts:    skipPrompts,
-		DefaultConfirm: false, // Destructive operation, default to no
-		Scope:          skill.ScopeGlobal,
-		ProjectRoot:    "",
+	if err := runMigrate(a, cfg, migrateRunOptions{
+		skipPrompts:    skipPrompts,
+		defaultConfirm: false, // Destructive operation, default to no
+		scope:          skill.ScopeGlobal,
+		projectRoot:    "",
 	}); err != nil {
 		return err
 	}
@@ -299,11 +299,11 @@ func initializeProject(a *app, skipPrompts bool) error {
 		return nil
 	}
 
-	if err := runMigrate(a, cfg, MigrateOptions{
-		SkipPrompts:    skipPrompts,
-		DefaultConfirm: false, // Destructive operation, default to no
-		Scope:          skill.ScopeProject,
-		ProjectRoot:    cwd,
+	if err := runMigrate(a, cfg, migrateRunOptions{
+		skipPrompts:    skipPrompts,
+		defaultConfirm: false, // Destructive operation, default to no
+		scope:          skill.ScopeProject,
+		projectRoot:    cwd,
 	}); err != nil {
 		return err
 	}

@@ -367,13 +367,11 @@ func TestLoaderLoadAllInDir(t *testing.T) {
 		name      string
 		setup     func(*fs.MockSystem)
 		dir       string
-		scope     Scope
-		category  Category
 		wantNames []string
 		wantErr   bool
 	}{
 		{
-			name: "load all skills with scope and category",
+			name: "load all skills",
 			setup: func(m *fs.MockSystem) {
 				m.Dirs["/skills"] = true
 				m.Dirs["/skills/skill-a"] = true
@@ -388,8 +386,6 @@ name: skill-b
 `)
 			},
 			dir:       "/skills",
-			scope:     ScopeGlobal,
-			category:  CategoryDefault,
 			wantNames: []string{"skill-a", "skill-b"},
 			wantErr:   false,
 		},
@@ -406,8 +402,6 @@ name: valid
 				m.Files["/skills/invalid/SKILL.md"] = []byte(`No frontmatter`)
 			},
 			dir:       "/skills",
-			scope:     ScopeProject,
-			category:  CategoryOptional,
 			wantNames: []string{"valid"},
 			wantErr:   false,
 		},
@@ -419,7 +413,7 @@ name: valid
 			tt.setup(mock)
 			loader := NewLoader(mock)
 
-			skills, err := loader.LoadAllInDir(tt.dir, tt.scope, tt.category)
+			skills, err := loader.LoadAllInDir(tt.dir)
 
 			if tt.wantErr {
 				if err == nil {
@@ -436,13 +430,6 @@ name: valid
 			var gotNames []string
 			for _, s := range skills {
 				gotNames = append(gotNames, s.Name)
-				// Verify scope and category are set
-				if s.Scope != tt.scope {
-					t.Errorf("LoadAllInDir() skill.Scope = %v, want %v", s.Scope, tt.scope)
-				}
-				if s.Category != tt.category {
-					t.Errorf("LoadAllInDir() skill.Category = %v, want %v", s.Category, tt.category)
-				}
 			}
 
 			if !stringSliceEqual(gotNames, tt.wantNames) {

@@ -89,7 +89,7 @@ func TestCategoryString(t *testing.T) {
 	}
 }
 
-func TestSkillPriority(t *testing.T) {
+func TestScopePriority(t *testing.T) {
 	tests := []struct {
 		name  string
 		scope Scope
@@ -102,20 +102,21 @@ func TestSkillPriority(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			skill, err := NewSkill("test", "", "", tt.scope, 0)
-			if err != nil {
-				t.Fatalf("NewSkill() error = %v", err)
-			}
-			if got := skill.Priority(); got != tt.want {
-				t.Errorf("Skill.Priority() = %v, want %v", got, tt.want)
+			if got := tt.scope.Priority(); got != tt.want {
+				t.Errorf("Scope.Priority() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestSkillPriorityOrder(t *testing.T) {
-	projectSkill, _ := NewSkill("test", "", "", ScopeProject, 0)
-	globalSkill, _ := NewSkill("test", "", "", ScopeGlobal, 0)
+func TestScopedSkillPriority(t *testing.T) {
+	skill, err := NewSkill("test", "", "")
+	if err != nil {
+		t.Fatalf("NewSkill() error = %v", err)
+	}
+
+	projectSkill := NewScopedSkill(skill, ScopeProject, CategoryDefault)
+	globalSkill := NewScopedSkill(skill, ScopeGlobal, CategoryDefault)
 
 	if projectSkill.Priority() <= globalSkill.Priority() {
 		t.Error("Project scope should have higher priority than Global scope")

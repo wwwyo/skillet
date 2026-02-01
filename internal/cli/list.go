@@ -35,15 +35,15 @@ If neither is specified, shows all skills.`,
 
 			store := skill.NewStore(a.fs, a.config, projectRoot)
 
-			var skills []*skill.Skill
+			var skills []*skill.ScopedSkill
 
 			if !scopeFlags.IsSet() {
 				// Show all
 				skills, err = store.GetAll()
 			} else {
-				scope, err := scopeFlags.GetScope()
-				if err != nil {
-					return err
+				scope, scopeErr := scopeFlags.GetScope()
+				if scopeErr != nil {
+					return scopeErr
 				}
 				skills, err = store.GetByScope(scope)
 			}
@@ -68,8 +68,8 @@ If neither is specified, shows all skills.`,
 }
 
 // printSkillsByScope groups and displays skills by scope.
-func printSkillsByScope(skills []*skill.Skill) {
-	grouped := make(map[skill.Scope][]*skill.Skill)
+func printSkillsByScope(skills []*skill.ScopedSkill) {
+	grouped := make(map[skill.Scope][]*skill.ScopedSkill)
 	for _, s := range skills {
 		grouped[s.Scope] = append(grouped[s.Scope], s)
 	}
@@ -83,7 +83,7 @@ func printSkillsByScope(skills []*skill.Skill) {
 }
 
 // printSkillSection prints a single scope section.
-func printSkillSection(scope skill.Scope, skills []*skill.Skill) {
+func printSkillSection(scope skill.Scope, skills []*skill.ScopedSkill) {
 	fmt.Printf("\n%s skills:\n", capitalizeFirst(scope.String()))
 	fmt.Println(strings.Repeat("-", 40))
 
@@ -93,7 +93,7 @@ func printSkillSection(scope skill.Scope, skills []*skill.Skill) {
 }
 
 // printSkill prints a single skill entry.
-func printSkill(s *skill.Skill) {
+func printSkill(s *skill.ScopedSkill) {
 	categoryMark := ""
 	if s.Category == skill.CategoryOptional {
 		categoryMark = " [optional]"

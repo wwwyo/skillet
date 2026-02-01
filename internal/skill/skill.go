@@ -27,6 +27,19 @@ func (s Scope) String() string {
 	}
 }
 
+// Priority returns the priority for conflict resolution.
+// Higher priority wins. Project > Global.
+func (s Scope) Priority() int {
+	switch s {
+	case ScopeProject:
+		return 2
+	case ScopeGlobal:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // Category represents the category of a skill within a scope.
 type Category int
 
@@ -48,18 +61,16 @@ func (c Category) String() string {
 	}
 }
 
-// Skill represents an AI agent skill.
+// Skill represents an AI agent skill (pure data).
 type Skill struct {
 	Name        string
 	Description string
-	Path        string   // absolute path to the skill directory
-	Scope       Scope    // where this skill is stored (global, project)
-	Category    Category // whether the skill is always active or available on demand
+	Path        string // absolute path to the skill directory
 }
 
 // NewSkill creates a new Skill. Use for all Skill creation.
 // Returns an error if the name is invalid.
-func NewSkill(name, description, path string, scope Scope, category Category) (*Skill, error) {
+func NewSkill(name, description, path string) (*Skill, error) {
 	if err := ValidateName(name); err != nil {
 		return nil, err
 	}
@@ -67,22 +78,29 @@ func NewSkill(name, description, path string, scope Scope, category Category) (*
 		Name:        name,
 		Description: description,
 		Path:        path,
-		Scope:       scope,
-		Category:    category,
 	}, nil
 }
 
-// Priority returns the priority of this skill for conflict resolution.
-// Higher priority wins. Project > Global.
-func (s *Skill) Priority() int {
-	switch s.Scope {
-	case ScopeProject:
-		return 2
-	case ScopeGlobal:
-		return 1
-	default:
-		return 0
+// ScopedSkill wraps a Skill with storage context (scope and category).
+// Use this when you need to know where a skill is stored.
+type ScopedSkill struct {
+	*Skill
+	Scope    Scope
+	Category Category
+}
+
+// NewScopedSkill creates a new ScopedSkill.
+func NewScopedSkill(skill *Skill, scope Scope, category Category) *ScopedSkill {
+	return &ScopedSkill{
+		Skill:    skill,
+		Scope:    scope,
+		Category: category,
 	}
+}
+
+// Priority returns the priority for conflict resolution based on scope.
+func (s *ScopedSkill) Priority() int {
+	return s.Scope.Priority()
 }
 
 // validNamePattern matches valid skill names (alphanumeric, hyphen, underscore).

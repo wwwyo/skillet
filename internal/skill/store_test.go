@@ -255,7 +255,7 @@ func TestStoreGetResolved(t *testing.T) {
 	}
 
 	// Find shared-skill and verify it's the project version
-	var sharedSkill *Skill
+	var sharedSkill *ScopedSkill
 	for _, s := range resolved {
 		if s.Name == "shared-skill" {
 			sharedSkill = s

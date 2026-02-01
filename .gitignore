@@ -1,0 +1,17 @@
+# Go
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI client skill directories (managed by skillet)
+.claude/skills/
+.codex/skills/

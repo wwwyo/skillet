@@ -39,7 +39,7 @@ func TestNewStore(t *testing.T) {
 	store := NewStore(mock, testConfig(), "/project")
 
 	if store == nil {
-		t.Error("NewStore() returned nil")
+		t.Fatal("NewStore() returned nil")
 	}
 	if store.fs != mock {
 		t.Error("NewStore() fs not set correctly")
@@ -190,111 +190,6 @@ func TestStoreGetByName(t *testing.T) {
 	})
 }
 
-func TestStoreAdd(t *testing.T) {
-	t.Run("add skill from directory", func(t *testing.T) {
-		mock := fs.NewMock()
-		setupGlobalSkillsDir(mock)
-
-		// Create source skill
-		mock.Dirs["/source/my-skill"] = true
-		mock.Files["/source/my-skill/SKILL.md"] = []byte(`---
-name: my-skill
-description: Test skill
----
-`)
-
-		store := NewStore(mock, testConfig(), "")
-		skill, err := store.Add("/source/my-skill", ScopeGlobal, CategoryDefault)
-
-		if err != nil {
-			t.Fatalf("Add() error = %v", err)
-		}
-		if skill.Name != "my-skill" {
-			t.Errorf("Add() returned name = %v, want 'my-skill'", skill.Name)
-		}
-		if skill.Scope != ScopeGlobal {
-			t.Errorf("Add() returned scope = %v, want global", skill.Scope)
-		}
-		if skill.Category != CategoryDefault {
-			t.Errorf("Add() returned category = %v, want default", skill.Category)
-		}
-
-		// Verify skill was copied
-		if !mock.Exists("/home/test/.agents/skills/my-skill/SKILL.md") {
-			t.Error("Add() did not copy SKILL.md to destination")
-		}
-	})
-
-	t.Run("add skill with invalid name", func(t *testing.T) {
-		mock := fs.NewMock()
-		setupGlobalSkillsDir(mock)
-
-		// Create source skill with invalid name
-		mock.Dirs["/source/..invalid"] = true
-		mock.Files["/source/..invalid/SKILL.md"] = []byte(`---
-name: ..invalid
-description: Invalid skill
----
-`)
-
-		store := NewStore(mock, testConfig(), "")
-		_, err := store.Add("/source/..invalid", ScopeGlobal, CategoryDefault)
-
-		if err == nil {
-			t.Error("Add() expected error for invalid skill name, got nil")
-		}
-	})
-
-	t.Run("add skill that already exists", func(t *testing.T) {
-		mock := fs.NewMock()
-		setupGlobalSkillsDir(mock)
-
-		// Add existing skill
-		addSkillToMock(mock, "/home/test/.agents/skills", "existing", "Existing skill")
-
-		// Create source skill with same name
-		mock.Dirs["/source/existing"] = true
-		mock.Files["/source/existing/SKILL.md"] = []byte(`---
-name: existing
-description: New skill
----
-`)
-
-		store := NewStore(mock, testConfig(), "")
-		_, err := store.Add("/source/existing", ScopeGlobal, CategoryDefault)
-
-		if err == nil {
-			t.Error("Add() expected error for existing skill, got nil")
-		}
-	})
-
-	t.Run("add skill to project scope", func(t *testing.T) {
-		mock := fs.NewMock()
-		setupProjectSkillsDir(mock, "/project")
-
-		mock.Dirs["/source/project-skill"] = true
-		mock.Files["/source/project-skill/SKILL.md"] = []byte(`---
-name: project-skill
-description: Project skill
----
-`)
-
-		store := NewStore(mock, testConfig(), "/project")
-		skill, err := store.Add("/source/project-skill", ScopeProject, CategoryOptional)
-
-		if err != nil {
-			t.Fatalf("Add() error = %v", err)
-		}
-		if skill.Scope != ScopeProject {
-			t.Errorf("Add() returned scope = %v, want project", skill.Scope)
-		}
-
-		if !mock.Exists("/project/.agents/skills/optional/project-skill/SKILL.md") {
-			t.Error("Add() did not copy SKILL.md to project destination")
-		}
-	})
-}
-
 func TestStoreRemove(t *testing.T) {
 	t.Run("remove existing skill", func(t *testing.T) {
 		mock := fs.NewMock()
@@ -302,26 +197,18 @@ func TestStoreRemove(t *testing.T) {
 		addSkillToMock(mock, "/home/test/.agents/skills", "to-remove", "Skill to remove")
 
 		store := NewStore(mock, testConfig(), "")
-		err := store.Remove("to-remove", ScopeGlobal)
+		s, err := store.FindInScope("to-remove", ScopeGlobal)
+		if err != nil {
+			t.Fatalf("FindInScope() error = %v", err)
+		}
 
+		err = store.Remove(s)
 		if err != nil {
 			t.Fatalf("Remove() error = %v", err)
 		}
 
 		if mock.Exists("/home/test/.agents/skills/to-remove") {
 			t.Error("Remove() did not delete skill directory")
-		}
-	})
-
-	t.Run("remove nonexistent skill", func(t *testing.T) {
-		mock := fs.NewMock()
-		setupGlobalSkillsDir(mock)
-
-		store := NewStore(mock, testConfig(), "")
-		err := store.Remove("nonexistent", ScopeGlobal)
-
-		if err == nil {
-			t.Error("Remove() expected error for nonexistent skill, got nil")
 		}
 	})
 }

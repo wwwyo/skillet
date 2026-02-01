@@ -213,7 +213,55 @@ func TestEngineSync(t *testing.T) {
 		}
 	})
 
-	t.Run("uninstall extra skill", func(t *testing.T) {
+	t.Run("project scope installs even if global exists", func(t *testing.T) {
+		mock := fs.NewMock()
+		mock.HomeDir = "/home/test"
+
+		// Setup project agents directory
+		mock.Dirs["/project/.agents"] = true
+		mock.Dirs["/project/.agents/skills"] = true
+		mock.Dirs["/project/.agents/skills/optional"] = true
+
+		// Setup target directories
+		mock.Dirs["/home/test/.claude"] = true
+		mock.Dirs["/home/test/.claude/skills"] = true
+		mock.Dirs["/project/.claude"] = true
+		mock.Dirs["/project/.claude/skills"] = true
+
+		// Project skill in store
+		mock.Dirs["/project/.agents/skills/shared-skill"] = true
+		mock.Files["/project/.agents/skills/shared-skill/SKILL.md"] = []byte("---\nname: shared-skill\n---\n")
+
+		// Same name already installed globally
+		mock.Dirs["/home/test/.claude/skills/shared-skill"] = true
+		mock.Files["/home/test/.claude/skills/shared-skill/SKILL.md"] = []byte("---\nname: shared-skill\n---\n")
+
+		cfg := config.Default()
+		store := skill.NewStore(mock, cfg, "/project")
+		registry := target.NewRegistry(mock, "/project", cfg)
+		engine := NewEngine(mock, store, registry, cfg, "/project")
+
+		results, err := engine.Sync(SyncOptions{TargetName: "claude"})
+		if err != nil {
+			t.Fatalf("Sync() error = %v", err)
+		}
+
+		hasInstall := false
+		for _, r := range results {
+			if r.Action == ActionInstall && r.SkillName == "shared-skill" {
+				hasInstall = true
+				break
+			}
+		}
+		if !hasInstall {
+			t.Error("Sync() should install project-scoped skill even if global exists")
+		}
+		if !mock.Exists("/project/.claude/skills/shared-skill") {
+			t.Error("Sync() should install project-scoped skill under project target path")
+		}
+	})
+
+	t.Run("does not uninstall extra skill", func(t *testing.T) {
 		mock, store, registry, cfg := setupTestEnv()
 
 		// Install a skill that's not in the store
@@ -227,16 +275,15 @@ func TestEngineSync(t *testing.T) {
 			t.Fatalf("Sync() error = %v", err)
 		}
 
-		// Should uninstall extra skill
-		hasUninstall := false
+		// Should not uninstall extra skill
 		for _, r := range results {
 			if r.Action == ActionUninstall && r.SkillName == "extra-skill" {
-				hasUninstall = true
+				t.Error("Sync() should not uninstall extra skill")
 				break
 			}
 		}
-		if !hasUninstall {
-			t.Error("Sync() should uninstall extra skill not in store")
+		if !mock.Exists("/home/test/.claude/skills/extra-skill") {
+			t.Error("Sync() should not remove extra skill from target")
 		}
 	})
 }

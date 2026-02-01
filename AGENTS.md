@@ -99,16 +99,14 @@ When same-named skills exist in multiple scopes, higher priority wins.
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `github.com/spf13/cobra` | CLI framework |
-| `gopkg.in/yaml.v3` | YAML parsing |
+- **Go**: 1.25.4+
+
 
 ## Common Tasks
 
 ### Build
 ```bash
-go build -o skillet ./cmd/skillet
+go build ./cmd/skillet
 ```
 
 ### Run Tests
@@ -116,8 +114,7 @@ go build -o skillet ./cmd/skillet
 go test ./...
 ```
 
-### Sync Skills to Targets
-```go
-engine := sync.NewEngine(fsys, store, registry, cfg, projectRoot)
-results, err := engine.Sync(sync.SyncOptions{DryRun: false, Force: false})
+### Lint
+```bash
+golangci-lint run
 ```

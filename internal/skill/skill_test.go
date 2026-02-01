@@ -51,34 +51,6 @@ func TestValidateName(t *testing.T) {
 	}
 }
 
-func TestParseScope(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    Scope
-		wantErr bool
-	}{
-		{"global scope", "global", ScopeGlobal, false},
-		{"project scope", "project", ScopeProject, false},
-		{"unknown scope", "unknown", ScopeGlobal, true},
-		{"empty scope", "", ScopeGlobal, true},
-		{"uppercase", "Global", ScopeGlobal, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseScope(tt.input)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseScope(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr && got != tt.want {
-				t.Errorf("ParseScope(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestScopeString(t *testing.T) {
 	tests := []struct {
 		scope Scope
@@ -117,41 +89,6 @@ func TestCategoryString(t *testing.T) {
 	}
 }
 
-func TestNewSkill(t *testing.T) {
-	skill := NewSkill("test-skill")
-
-	if skill.Name != "test-skill" {
-		t.Errorf("NewSkill() Name = %v, want %v", skill.Name, "test-skill")
-	}
-	if skill.Description != "" {
-		t.Errorf("NewSkill() Description = %v, want empty", skill.Description)
-	}
-}
-
-func TestSkillBuilderPattern(t *testing.T) {
-	skill := NewSkill("test-skill").
-		WithDescription("A test skill").
-		WithPath("/path/to/skill").
-		WithScope(ScopeProject).
-		WithCategory(CategoryDefault)
-
-	if skill.Name != "test-skill" {
-		t.Errorf("skill.Name = %v, want %v", skill.Name, "test-skill")
-	}
-	if skill.Description != "A test skill" {
-		t.Errorf("skill.Description = %v, want %v", skill.Description, "A test skill")
-	}
-	if skill.Path != "/path/to/skill" {
-		t.Errorf("skill.Path = %v, want %v", skill.Path, "/path/to/skill")
-	}
-	if skill.Scope != ScopeProject {
-		t.Errorf("skill.Scope = %v, want %v", skill.Scope, ScopeProject)
-	}
-	if skill.Category != CategoryDefault {
-		t.Errorf("skill.Category = %v, want %v", skill.Category, CategoryDefault)
-	}
-}
-
 func TestSkillPriority(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -165,7 +102,10 @@ func TestSkillPriority(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			skill := NewSkill("test").WithScope(tt.scope)
+			skill, err := NewSkill("test", "", "", tt.scope, 0)
+			if err != nil {
+				t.Fatalf("NewSkill() error = %v", err)
+			}
 			if got := skill.Priority(); got != tt.want {
 				t.Errorf("Skill.Priority() = %v, want %v", got, tt.want)
 			}
@@ -174,8 +114,8 @@ func TestSkillPriority(t *testing.T) {
 }
 
 func TestSkillPriorityOrder(t *testing.T) {
-	projectSkill := NewSkill("test").WithScope(ScopeProject)
-	globalSkill := NewSkill("test").WithScope(ScopeGlobal)
+	projectSkill, _ := NewSkill("test", "", "", ScopeProject, 0)
+	globalSkill, _ := NewSkill("test", "", "", ScopeGlobal, 0)
 
 	if projectSkill.Priority() <= globalSkill.Priority() {
 		t.Error("Project scope should have higher priority than Global scope")

@@ -95,18 +95,33 @@ func TestFindExistingSkills(t *testing.T) {
 	t.Run("finds skills with nested SKILL.md", func(t *testing.T) {
 		mock, a, cfg := setupMigrateTestEnv()
 
-		// Add a skill with nested SKILL.md (e.g., .system/commands/SKILL.md)
-		mock.Dirs["/home/test/.claude/skills/.system"] = true
-		mock.Dirs["/home/test/.claude/skills/.system/commands"] = true
-		mock.Files["/home/test/.claude/skills/.system/commands/SKILL.md"] = []byte("---\nname: commands\n---")
+		// Add a skill with nested SKILL.md (e.g., skill-a/.system/commands/SKILL.md)
+		mock.Dirs["/home/test/.claude/skills/skill-a"] = true
+		mock.Dirs["/home/test/.claude/skills/skill-a/.system"] = true
+		mock.Dirs["/home/test/.claude/skills/skill-a/.system/commands"] = true
+		mock.Files["/home/test/.claude/skills/skill-a/.system/commands/SKILL.md"] = []byte("---\nname: commands\n---")
 
 		result := findExistingSkills(a, cfg, skill.ScopeGlobal, "")
 
 		if len(result["claude"]) != 1 {
 			t.Errorf("findExistingSkills() claude skills = %d, want 1", len(result["claude"]))
 		}
-		if result["claude"][0] != ".system" {
-			t.Errorf("findExistingSkills() skill name = %s, want .system", result["claude"][0])
+		if result["claude"][0] != "skill-a" {
+			t.Errorf("findExistingSkills() skill name = %s, want skill-a", result["claude"][0])
+		}
+	})
+
+	t.Run("skips dot-start top-level directories", func(t *testing.T) {
+		mock, a, cfg := setupMigrateTestEnv()
+
+		mock.Dirs["/home/test/.claude/skills/.system"] = true
+		mock.Dirs["/home/test/.claude/skills/.system/commands"] = true
+		mock.Files["/home/test/.claude/skills/.system/commands/SKILL.md"] = []byte("---\nname: commands\n---")
+
+		result := findExistingSkills(a, cfg, skill.ScopeGlobal, "")
+
+		if len(result["claude"]) != 0 {
+			t.Errorf("findExistingSkills() should skip dot-start directories, got %d", len(result["claude"]))
 		}
 	})
 

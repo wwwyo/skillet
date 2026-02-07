@@ -5,18 +5,18 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/skill"
+	"github.com/wwwyo/skillet/internal/service"
 )
 
 // ScopeFlags holds the scope-related flags for commands.
 type ScopeFlags struct {
 	Global       bool
 	Project      bool
-	DefaultScope skill.Scope
+	DefaultScope service.Scope
 }
 
 // NewScopeFlags creates a new ScopeFlags with the given default scope.
-func NewScopeFlags(defaultScope skill.Scope) ScopeFlags {
+func NewScopeFlags(defaultScope service.Scope) ScopeFlags {
 	return ScopeFlags{DefaultScope: defaultScope}
 }
 
@@ -27,18 +27,16 @@ func AddScopeFlags(cmd *cobra.Command, flags *ScopeFlags) {
 }
 
 // GetScope returns the scope based on the flags.
-// Returns an error if both flags are set.
-// If neither is set, returns the DefaultScope.
-func (f *ScopeFlags) GetScope() (skill.Scope, error) {
+func (f *ScopeFlags) GetScope() (service.Scope, error) {
 	if f.Global && f.Project {
 		return 0, fmt.Errorf("cannot specify both --global and --project")
 	}
 
 	if f.Global {
-		return skill.ScopeGlobal, nil
+		return service.ScopeGlobal, nil
 	}
 	if f.Project {
-		return skill.ScopeProject, nil
+		return service.ScopeProject, nil
 	}
 
 	return f.DefaultScope, nil

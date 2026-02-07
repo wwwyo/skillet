@@ -1,4 +1,4 @@
-package skill
+package service
 
 import (
 	"testing"
@@ -10,30 +10,19 @@ func TestValidateName(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		// Valid names
 		{"valid simple name", "my-skill", false},
 		{"valid with underscore", "my_skill", false},
 		{"valid with numbers", "skill123", false},
 		{"valid alphanumeric", "MySkill2", false},
 		{"valid single char", "a", false},
-
-		// Invalid names - empty
 		{"empty name", "", true},
-
-		// Invalid names - path traversal
 		{"contains forward slash", "my/skill", true},
 		{"contains backslash", "my\\skill", true},
 		{"contains double dot", "my..skill", true},
 		{"path traversal attempt", "../etc/passwd", true},
-
-		// Invalid names - hidden files
 		{"starts with dot", ".hidden", true},
 		{"dotfile", ".gitignore", true},
-
-		// Valid - numbers at start are allowed by the regex
 		{"starts with number", "123skill", false},
-
-		// Invalid names - pattern mismatch
 		{"starts with hyphen", "-skill", true},
 		{"starts with underscore", "_skill", true},
 		{"contains space", "my skill", true},

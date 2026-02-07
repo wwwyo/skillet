@@ -1,4 +1,4 @@
-package fs
+package adapters
 
 import (
 	"fmt"
@@ -6,19 +6,24 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/wwwyo/skillet/internal/service"
 )
 
-// MockSystem implements System for testing purposes.
-type MockSystem struct {
+// MockFileSystem implements service.FileSystem for testing purposes.
+type MockFileSystem struct {
 	Files    map[string][]byte
 	Dirs     map[string]bool
 	Symlinks map[string]string
 	HomeDir  string
 }
 
-// NewMock returns a new MockSystem.
-func NewMock() *MockSystem {
-	return &MockSystem{
+// Compile-time interface check.
+var _ service.FileSystem = (*MockFileSystem)(nil)
+
+// NewMockFileSystem returns a new MockFileSystem.
+func NewMockFileSystem() *MockFileSystem {
+	return &MockFileSystem{
 		Files:    make(map[string][]byte),
 		Dirs:     make(map[string]bool),
 		Symlinks: make(map[string]string),
@@ -26,7 +31,7 @@ func NewMock() *MockSystem {
 	}
 }
 
-func (m *MockSystem) ReadFile(path string) ([]byte, error) {
+func (m *MockFileSystem) ReadFile(path string) ([]byte, error) {
 	path = m.normalizePath(path)
 	if data, ok := m.Files[path]; ok {
 		return data, nil
@@ -34,13 +39,13 @@ func (m *MockSystem) ReadFile(path string) ([]byte, error) {
 	return nil, os.ErrNotExist
 }
 
-func (m *MockSystem) WriteFile(path string, data []byte, _ os.FileMode) error {
+func (m *MockFileSystem) WriteFile(path string, data []byte, _ os.FileMode) error {
 	path = m.normalizePath(path)
 	m.Files[path] = data
 	return nil
 }
 
-func (m *MockSystem) Stat(path string) (os.FileInfo, error) {
+func (m *MockFileSystem) Stat(path string) (os.FileInfo, error) {
 	path = m.normalizePath(path)
 
 	// Follow symlinks
@@ -57,11 +62,11 @@ func (m *MockSystem) Stat(path string) (os.FileInfo, error) {
 	return nil, os.ErrNotExist
 }
 
-func (m *MockSystem) Lstat(path string) (os.FileInfo, error) {
+func (m *MockFileSystem) Lstat(path string) (os.FileInfo, error) {
 	path = m.normalizePath(path)
 
 	if _, ok := m.Symlinks[path]; ok {
-		return &mockFileInfo{name: filepath.Base(path), isDir: false, mode: ModeSymlink}, nil
+		return &mockFileInfo{name: filepath.Base(path), isDir: false, mode: service.ModeSymlink}, nil
 	}
 	if _, ok := m.Files[path]; ok {
 		return &mockFileInfo{name: filepath.Base(path), isDir: false}, nil
@@ -72,7 +77,7 @@ func (m *MockSystem) Lstat(path string) (os.FileInfo, error) {
 	return nil, os.ErrNotExist
 }
 
-func (m *MockSystem) Remove(path string) error {
+func (m *MockFileSystem) Remove(path string) error {
 	path = m.normalizePath(path)
 	delete(m.Files, path)
 	delete(m.Dirs, path)
@@ -80,7 +85,7 @@ func (m *MockSystem) Remove(path string) error {
 	return nil
 }
 
-func (m *MockSystem) RemoveAll(path string) error {
+func (m *MockFileSystem) RemoveAll(path string) error {
 	path = m.normalizePath(path)
 
 	// Remove exact match
@@ -108,7 +113,7 @@ func (m *MockSystem) RemoveAll(path string) error {
 	return nil
 }
 
-func (m *MockSystem) Rename(oldpath, newpath string) error {
+func (m *MockFileSystem) Rename(oldpath, newpath string) error {
 	oldpath = m.normalizePath(oldpath)
 	newpath = m.normalizePath(newpath)
 
@@ -125,7 +130,7 @@ func (m *MockSystem) Rename(oldpath, newpath string) error {
 	return os.ErrNotExist
 }
 
-func (m *MockSystem) MkdirAll(path string, _ os.FileMode) error {
+func (m *MockFileSystem) MkdirAll(path string, _ os.FileMode) error {
 	path = m.normalizePath(path)
 	m.Dirs[path] = true
 
@@ -140,7 +145,7 @@ func (m *MockSystem) MkdirAll(path string, _ os.FileMode) error {
 	return nil
 }
 
-func (m *MockSystem) ReadDir(path string) ([]os.DirEntry, error) {
+func (m *MockFileSystem) ReadDir(path string) ([]os.DirEntry, error) {
 	path = m.normalizePath(path)
 
 	if !m.Dirs[path] {
@@ -192,7 +197,7 @@ func (m *MockSystem) ReadDir(path string) ([]os.DirEntry, error) {
 	return entries, nil
 }
 
-func (m *MockSystem) Exists(path string) bool {
+func (m *MockFileSystem) Exists(path string) bool {
 	path = m.normalizePath(path)
 	if _, ok := m.Files[path]; ok {
 		return true
@@ -206,7 +211,7 @@ func (m *MockSystem) Exists(path string) bool {
 	return false
 }
 
-func (m *MockSystem) IsDir(path string) bool {
+func (m *MockFileSystem) IsDir(path string) bool {
 	path = m.normalizePath(path)
 
 	// Follow symlinks
@@ -217,19 +222,19 @@ func (m *MockSystem) IsDir(path string) bool {
 	return m.Dirs[path]
 }
 
-func (m *MockSystem) IsSymlink(path string) bool {
+func (m *MockFileSystem) IsSymlink(path string) bool {
 	path = m.normalizePath(path)
 	_, ok := m.Symlinks[path]
 	return ok
 }
 
-func (m *MockSystem) Symlink(oldname, newname string) error {
+func (m *MockFileSystem) Symlink(oldname, newname string) error {
 	newname = m.normalizePath(newname)
 	m.Symlinks[newname] = oldname
 	return nil
 }
 
-func (m *MockSystem) Readlink(path string) (string, error) {
+func (m *MockFileSystem) Readlink(path string) (string, error) {
 	path = m.normalizePath(path)
 	if target, ok := m.Symlinks[path]; ok {
 		return target, nil
@@ -237,7 +242,7 @@ func (m *MockSystem) Readlink(path string) (string, error) {
 	return "", fmt.Errorf("not a symlink: %s", path)
 }
 
-func (m *MockSystem) CopyFile(src, dst string) error {
+func (m *MockFileSystem) CopyFile(src, dst string) error {
 	src = m.normalizePath(src)
 	dst = m.normalizePath(dst)
 
@@ -250,7 +255,7 @@ func (m *MockSystem) CopyFile(src, dst string) error {
 	return nil
 }
 
-func (m *MockSystem) CopyDir(src, dst string) error {
+func (m *MockFileSystem) CopyDir(src, dst string) error {
 	src = m.normalizePath(src)
 	dst = m.normalizePath(dst)
 
@@ -280,34 +285,34 @@ func (m *MockSystem) CopyDir(src, dst string) error {
 	return nil
 }
 
-func (m *MockSystem) Abs(path string) (string, error) {
+func (m *MockFileSystem) Abs(path string) (string, error) {
 	if filepath.IsAbs(path) {
 		return path, nil
 	}
 	return "/" + path, nil
 }
 
-func (m *MockSystem) Rel(basepath, targpath string) (string, error) {
+func (m *MockFileSystem) Rel(basepath, targpath string) (string, error) {
 	return filepath.Rel(basepath, targpath)
 }
 
-func (m *MockSystem) Join(elem ...string) string {
+func (m *MockFileSystem) Join(elem ...string) string {
 	return filepath.Join(elem...)
 }
 
-func (m *MockSystem) Dir(path string) string {
+func (m *MockFileSystem) Dir(path string) string {
 	return filepath.Dir(path)
 }
 
-func (m *MockSystem) Base(path string) string {
+func (m *MockFileSystem) Base(path string) string {
 	return filepath.Base(path)
 }
 
-func (m *MockSystem) UserHomeDir() (string, error) {
+func (m *MockFileSystem) UserHomeDir() (string, error) {
 	return m.HomeDir, nil
 }
 
-func (m *MockSystem) normalizePath(path string) string {
+func (m *MockFileSystem) normalizePath(path string) string {
 	// Replace ~ with home directory
 	if strings.HasPrefix(path, "~") {
 		path = m.HomeDir + path[1:]
@@ -340,7 +345,7 @@ func (m *mockDirEntry) Name() string { return m.name }
 func (m *mockDirEntry) IsDir() bool  { return m.isDir }
 func (m *mockDirEntry) Type() os.FileMode {
 	if m.isSymlink {
-		return ModeSymlink
+		return service.ModeSymlink
 	}
 	if m.isDir {
 		return os.ModeDir
@@ -350,7 +355,7 @@ func (m *mockDirEntry) Type() os.FileMode {
 func (m *mockDirEntry) Info() (os.FileInfo, error) {
 	mode := os.FileMode(0)
 	if m.isSymlink {
-		mode = ModeSymlink
+		mode = service.ModeSymlink
 	}
 	return &mockFileInfo{name: m.name, isDir: m.isDir, mode: mode}, nil
 }

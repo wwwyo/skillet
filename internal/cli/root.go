@@ -7,35 +7,54 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
 
-	"github.com/wwwyo/skillet/internal/config"
-	"github.com/wwwyo/skillet/internal/fs"
+	"github.com/wwwyo/skillet/internal/adapters"
+	"github.com/wwwyo/skillet/internal/service"
 )
 
 var (
 	// version is set via ldflags during build: -ldflags "-X github.com/wwwyo/skillet/internal/cli.version=v1.0.0"
-	// Default value for development builds
 	version = "v0.0.0"
 	cfgFile string
 )
 
 func init() {
 	if !semver.IsValid(version) {
-		// Panic if invalid version was set via ldflags (build-time error)
 		panic(fmt.Sprintf("invalid version set via ldflags: %q (must be valid semver)", version))
 	}
 }
 
 // app represents the CLI application with its dependencies.
 type app struct {
-	fs     fs.System
-	config *config.Config
+	fs          service.FileSystem
+	config      *service.Config
+	configStore service.ConfigStore
 }
 
 // newApp creates a new app instance.
 func newApp() *app {
+	fs := adapters.NewFileSystem()
 	return &app{
-		fs: fs.New(),
+		fs:          fs,
+		configStore: adapters.NewConfigStore(fs),
 	}
+}
+
+// newSkillService creates a SkillService with standard wiring.
+func (a *app) newSkillService() (*service.SkillService, error) {
+	root, err := a.configStore.FindProjectRoot()
+	if err != nil {
+		root = ""
+	}
+	store := adapters.NewSkillStore(a.fs, a.config, root)
+	targets := adapters.NewRegistry(a.fs, root, a.config)
+	return service.NewSkillService(a.fs, store, targets, a.config, root), nil
+}
+
+// newSkillStore creates a SkillStore and returns the project root.
+// The caller can decide how to handle a missing project root.
+func (a *app) newSkillStore() (*adapters.SkillStore, string, error) {
+	root, err := a.configStore.FindProjectRoot()
+	return adapters.NewSkillStore(a.fs, a.config, root), root, err
 }
 
 // newRootCmd creates the root command for skillet.
@@ -46,14 +65,12 @@ func newRootCmd(a *app) *cobra.Command {
 		Long:    `Skillet manages AI agent skills as a Single Source of Truth (SSOT) for distribution and synthesis.`,
 		Version: version,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Load configuration
-			cfg, err := config.Load(a.fs, cfgFile)
+			cfg, err := a.configStore.Load(cfgFile)
 			if err != nil {
-				// Config might not exist yet, which is fine for init and migrate commands
 				if cmd.Name() != "init" && cmd.Name() != "migrate" {
 					return fmt.Errorf("failed to load config: %w", err)
 				}
-				cfg = config.Default()
+				cfg = service.DefaultConfig()
 			}
 			a.config = cfg
 			return nil
@@ -62,7 +79,6 @@ func newRootCmd(a *app) *cobra.Command {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "~/.config/skillet/config.yaml", "config file path")
 
-	// Add subcommands
 	rootCmd.AddCommand(newInitCmd(a))
 	rootCmd.AddCommand(newRemoveCmd(a))
 	rootCmd.AddCommand(newListCmd(a))

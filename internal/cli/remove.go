@@ -5,15 +5,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/config"
-	"github.com/wwwyo/skillet/internal/orchestrator"
-	"github.com/wwwyo/skillet/internal/skill"
-	"github.com/wwwyo/skillet/internal/target"
+	"github.com/wwwyo/skillet/internal/service"
 )
 
 // newRemoveCmd creates the remove command.
 func newRemoveCmd(a *app) *cobra.Command {
-	scopeFlags := NewScopeFlags(skill.ScopeProject)
+	scopeFlags := NewScopeFlags(service.ScopeProject)
 
 	cmd := &cobra.Command{
 		Use:   "remove <name>",
@@ -28,18 +25,12 @@ This removes the skill from both the skillet store and all configured targets
 		Aliases: []string{"rm"},
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Find project root
-			projectRoot, err := config.FindProjectRoot(a.fs)
+			svc, err := a.newSkillService()
 			if err != nil {
-				projectRoot = ""
+				return err
 			}
 
-			store := skill.NewStore(a.fs, a.config, projectRoot)
-			registry := target.NewRegistry(a.fs, projectRoot, a.config)
-			orch := orchestrator.New(a.fs, store, registry, a.config, projectRoot)
-
-			// Build options
-			opts := orchestrator.RemoveOptions{Name: args[0]}
+			opts := service.RemoveOptions{Name: args[0]}
 			if scopeFlags.IsSet() {
 				scope, err := scopeFlags.GetScope()
 				if err != nil {
@@ -48,13 +39,11 @@ This removes the skill from both the skillet store and all configured targets
 				opts.Scope = &scope
 			}
 
-			// Execute removal
-			result := orch.Remove(opts)
+			result := svc.Remove(opts)
 			if result.Error != nil {
 				return result.Error
 			}
 
-			// Print results
 			printRemoveResult(result)
 
 			return nil
@@ -67,7 +56,7 @@ This removes the skill from both the skillet store and all configured targets
 }
 
 // printRemoveResult prints the result of a remove operation.
-func printRemoveResult(result *orchestrator.RemoveResult) {
+func printRemoveResult(result *service.RemoveResult) {
 	fmt.Printf("Removed skill '%s' from %s scope\n", result.SkillName, result.Scope)
 
 	for _, tr := range result.TargetResults {

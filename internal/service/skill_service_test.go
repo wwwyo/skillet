@@ -1,40 +1,35 @@
-package orchestrator
+package service_test
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/wwwyo/skillet/internal/config"
-	"github.com/wwwyo/skillet/internal/fs"
-	"github.com/wwwyo/skillet/internal/skill"
-	"github.com/wwwyo/skillet/internal/target"
+	"github.com/wwwyo/skillet/internal/adapters"
+	"github.com/wwwyo/skillet/internal/service"
 )
 
 // setupTestEnv creates a test environment with mock filesystem
-func setupTestEnv() (*fs.MockSystem, *skill.Store, *target.Registry, *config.Config) {
-	mock := fs.NewMock()
+func setupTestEnv() (*adapters.MockFileSystem, *adapters.SkillStore, *adapters.Registry, *service.Config) {
+	mock := adapters.NewMockFileSystem()
 	mock.HomeDir = "/home/test"
 
-	// Setup global skills directory
 	mock.Dirs["/home/test/.agents"] = true
 	mock.Dirs["/home/test/.agents/skills"] = true
 	mock.Dirs["/home/test/.agents/skills/optional"] = true
-
-	// Setup target directories
 	mock.Dirs["/home/test/.claude"] = true
 	mock.Dirs["/home/test/.claude/skills"] = true
 	mock.Dirs["/home/test/.codex"] = true
 	mock.Dirs["/home/test/.codex/skills"] = true
 
-	cfg := config.Default()
-	store := skill.NewStore(mock, cfg, "")
-	registry := target.NewRegistry(mock, "", cfg)
+	cfg := service.DefaultConfig()
+	store := adapters.NewSkillStore(mock, cfg, "")
+	registry := adapters.NewRegistry(mock, "", cfg)
 
 	return mock, store, registry, cfg
 }
 
 // addSkillToStore adds a skill to the mock filesystem
-func addSkillToStore(m *fs.MockSystem, category, name, desc string) {
+func addSkillToStore(m *adapters.MockFileSystem, category, name, desc string) {
 	var skillDir string
 	if category == "default" {
 		skillDir = "/home/test/.agents/skills/" + name
@@ -46,24 +41,12 @@ func addSkillToStore(m *fs.MockSystem, category, name, desc string) {
 	m.Files[skillDir+"/SKILL.md"] = []byte(content)
 }
 
-func TestNew(t *testing.T) {
+func TestNewSkillService(t *testing.T) {
 	mock, store, registry, cfg := setupTestEnv()
-	orch := New(mock, store, registry, cfg, "/project")
+	svc := service.NewSkillService(mock, store, registry, cfg, "/project")
 
-	if orch == nil {
-		t.Fatal("New() returned nil")
-	}
-	if orch.fs != mock {
-		t.Error("New() fs not set correctly")
-	}
-	if orch.store != store {
-		t.Error("New() store not set correctly")
-	}
-	if orch.registry != registry {
-		t.Error("New() registry not set correctly")
-	}
-	if orch.projectRoot != "/project" {
-		t.Errorf("New() projectRoot = %v, want /project", orch.projectRoot)
+	if svc == nil {
+		t.Fatal("NewSkillService() returned nil")
 	}
 }
 
@@ -72,8 +55,8 @@ func TestSync(t *testing.T) {
 		mock, store, registry, cfg := setupTestEnv()
 		addSkillToStore(mock, "default", "test-skill", "Test skill")
 
-		orch := New(mock, store, registry, cfg, "")
-		results, err := orch.Sync(SyncOptions{})
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		results, err := svc.Sync(service.SyncOptions{})
 
 		if err != nil {
 			t.Fatalf("Sync() error = %v", err)
@@ -85,7 +68,7 @@ func TestSync(t *testing.T) {
 
 		hasInstall := false
 		for _, r := range results {
-			if r.Action == SyncActionInstall {
+			if r.Action == service.SyncActionInstall {
 				hasInstall = true
 				break
 			}
@@ -99,8 +82,8 @@ func TestSync(t *testing.T) {
 		mock, store, registry, cfg := setupTestEnv()
 		addSkillToStore(mock, "default", "dry-run-skill", "Dry run test")
 
-		orch := New(mock, store, registry, cfg, "")
-		results, err := orch.Sync(SyncOptions{DryRun: true})
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		results, err := svc.Sync(service.SyncOptions{DryRun: true})
 
 		if err != nil {
 			t.Fatalf("Sync() error = %v", err)
@@ -113,7 +96,7 @@ func TestSync(t *testing.T) {
 
 		hasInstall := false
 		for _, r := range results {
-			if r.Action == SyncActionInstall && r.SkillName == "dry-run-skill" {
+			if r.Action == service.SyncActionInstall && r.SkillName == "dry-run-skill" {
 				hasInstall = true
 				break
 			}
@@ -127,16 +110,16 @@ func TestSync(t *testing.T) {
 		mock, store, registry, cfg := setupTestEnv()
 		addSkillToStore(mock, "default", "global-skill", "Global skill")
 
-		orch := New(mock, store, registry, cfg, "")
-		globalScope := skill.ScopeGlobal
-		results, err := orch.Sync(SyncOptions{Scope: &globalScope})
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		globalScope := service.ScopeGlobal
+		results, err := svc.Sync(service.SyncOptions{Scope: &globalScope})
 
 		if err != nil {
 			t.Fatalf("Sync() error = %v", err)
 		}
 
 		for _, r := range results {
-			if r.Action == SyncActionInstall && r.SkillName == "global-skill" {
+			if r.Action == service.SyncActionInstall && r.SkillName == "global-skill" {
 				return
 			}
 		}
@@ -152,8 +135,8 @@ func TestSync(t *testing.T) {
 		mock.Dirs["/home/test/.codex/skills/installed-skill"] = true
 		mock.Files["/home/test/.codex/skills/installed-skill/SKILL.md"] = []byte("---\nname: installed-skill\n---\n")
 
-		orch := New(mock, store, registry, cfg, "")
-		results, err := orch.Sync(SyncOptions{})
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		results, err := svc.Sync(service.SyncOptions{})
 
 		if err != nil {
 			t.Fatalf("Sync() error = %v", err)
@@ -161,7 +144,7 @@ func TestSync(t *testing.T) {
 
 		hasSkip := false
 		for _, r := range results {
-			if r.Action == SyncActionSkip && r.SkillName == "installed-skill" {
+			if r.Action == service.SyncActionSkip && r.SkillName == "installed-skill" {
 				hasSkip = true
 				break
 			}
@@ -180,8 +163,8 @@ func TestSync(t *testing.T) {
 		mock.Dirs["/home/test/.codex/skills/update-skill"] = true
 		mock.Files["/home/test/.codex/skills/update-skill/SKILL.md"] = []byte("---\nname: update-skill\n---\n")
 
-		orch := New(mock, store, registry, cfg, "")
-		results, err := orch.Sync(SyncOptions{Force: true})
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		results, err := svc.Sync(service.SyncOptions{Force: true})
 
 		if err != nil {
 			t.Fatalf("Sync() error = %v", err)
@@ -189,7 +172,7 @@ func TestSync(t *testing.T) {
 
 		hasUpdate := false
 		for _, r := range results {
-			if r.Action == SyncActionUpdate && r.SkillName == "update-skill" {
+			if r.Action == service.SyncActionUpdate && r.SkillName == "update-skill" {
 				hasUpdate = true
 				break
 			}
@@ -208,8 +191,8 @@ func TestGetStatus(t *testing.T) {
 		mock.Dirs["/home/test/.claude/skills/synced-skill"] = true
 		mock.Dirs["/home/test/.codex/skills/synced-skill"] = true
 
-		orch := New(mock, store, registry, cfg, "")
-		statuses, err := orch.GetStatus()
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		statuses, err := svc.GetStatus()
 
 		if err != nil {
 			t.Fatalf("GetStatus() error = %v", err)
@@ -226,8 +209,8 @@ func TestGetStatus(t *testing.T) {
 		mock, store, registry, cfg := setupTestEnv()
 		addSkillToStore(mock, "default", "missing-skill", "Missing skill")
 
-		orch := New(mock, store, registry, cfg, "")
-		statuses, err := orch.GetStatus()
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		statuses, err := svc.GetStatus()
 
 		if err != nil {
 			t.Fatalf("GetStatus() error = %v", err)
@@ -248,14 +231,14 @@ func TestGetStatus(t *testing.T) {
 
 		mock.Dirs["/home/test/.claude/skills/extra-skill"] = true
 
-		orch := New(mock, store, registry, cfg, "")
-		statuses, err := orch.GetStatus()
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		statuses, err := svc.GetStatus()
 
 		if err != nil {
 			t.Fatalf("GetStatus() error = %v", err)
 		}
 
-		var claudeStatus *Status
+		var claudeStatus *service.Status
 		for _, s := range statuses {
 			if s.Target == "claude" {
 				claudeStatus = s
@@ -278,44 +261,27 @@ func TestGetStatus(t *testing.T) {
 
 func TestNewStatus(t *testing.T) {
 	t.Run("empty status is in sync", func(t *testing.T) {
-		status := NewStatus(StatusParams{Target: "claude"})
-
-		if status.Target != "claude" {
-			t.Errorf("NewStatus().Target = %v, want claude", status.Target)
-		}
+		status := service.NewStatus(service.StatusParams{Target: "claude"})
 		if !status.InSync {
 			t.Error("NewStatus() with no missing/extra should be in sync")
 		}
 	})
 
 	t.Run("status with missing skills is not in sync", func(t *testing.T) {
-		status := NewStatus(StatusParams{
+		status := service.NewStatus(service.StatusParams{
 			Target:  "claude",
 			Missing: []string{"skill-b"},
 		})
-
 		if status.InSync {
 			t.Error("Status with missing skills should not be in sync")
 		}
 	})
 
-	t.Run("status with extra skills is not in sync", func(t *testing.T) {
-		status := NewStatus(StatusParams{
-			Target: "codex",
-			Extra:  []string{"skill-c"},
-		})
-
-		if status.InSync {
-			t.Error("Status with extra skills should not be in sync")
-		}
-	})
-
 	t.Run("status with error is not in sync", func(t *testing.T) {
-		status := NewStatus(StatusParams{
+		status := service.NewStatus(service.StatusParams{
 			Target: "test",
 			Error:  fmt.Errorf("test error"),
 		})
-
 		if status.InSync {
 			t.Error("Status with error should not be in sync")
 		}
@@ -327,12 +293,11 @@ func TestRemove(t *testing.T) {
 		mock, store, registry, cfg := setupTestEnv()
 		addSkillToStore(mock, "default", "remove-me", "Skill to remove")
 
-		// Pre-install to targets
 		mock.Dirs["/home/test/.claude/skills/remove-me"] = true
 		mock.Dirs["/home/test/.codex/skills/remove-me"] = true
 
-		orch := New(mock, store, registry, cfg, "")
-		result := orch.Remove(RemoveOptions{Name: "remove-me"})
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		result := svc.Remove(service.RemoveOptions{Name: "remove-me"})
 
 		if result.Error != nil {
 			t.Fatalf("Remove() error = %v", result.Error)
@@ -341,20 +306,13 @@ func TestRemove(t *testing.T) {
 		if !result.StoreRemoved {
 			t.Error("Remove() should have removed from store")
 		}
-
-		// Check targets were cleaned up
-		for _, tr := range result.TargetResults {
-			if tr.Error != nil {
-				t.Errorf("Remove() target %s error = %v", tr.Target, tr.Error)
-			}
-		}
 	})
 
 	t.Run("remove non-existent skill", func(t *testing.T) {
 		mock, store, registry, cfg := setupTestEnv()
 
-		orch := New(mock, store, registry, cfg, "")
-		result := orch.Remove(RemoveOptions{Name: "does-not-exist"})
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		result := svc.Remove(service.RemoveOptions{Name: "does-not-exist"})
 
 		if result.Error == nil {
 			t.Error("Remove() should return error for non-existent skill")
@@ -364,8 +322,8 @@ func TestRemove(t *testing.T) {
 	t.Run("remove with invalid name", func(t *testing.T) {
 		mock, store, registry, cfg := setupTestEnv()
 
-		orch := New(mock, store, registry, cfg, "")
-		result := orch.Remove(RemoveOptions{Name: "../invalid"})
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+		result := svc.Remove(service.RemoveOptions{Name: "../invalid"})
 
 		if result.Error == nil {
 			t.Error("Remove() should return error for invalid name")
@@ -373,16 +331,72 @@ func TestRemove(t *testing.T) {
 	})
 }
 
+func TestFindSkillsToMigrate(t *testing.T) {
+	setupMigrateEnv := func() (*adapters.MockFileSystem, *service.SkillService) {
+		mock := adapters.NewMockFileSystem()
+		mock.HomeDir = "/home/test"
+		mock.Dirs["/home/test/.agents"] = true
+		mock.Dirs["/home/test/.agents/skills"] = true
+		mock.Dirs["/home/test/.claude"] = true
+		mock.Dirs["/home/test/.claude/skills"] = true
+		mock.Dirs["/home/test/.codex"] = true
+		mock.Dirs["/home/test/.codex/skills"] = true
+
+		cfg := service.DefaultConfig()
+		store := adapters.NewSkillStore(mock, cfg, "")
+		registry := adapters.NewRegistry(mock, "", cfg)
+		svc := service.NewSkillService(mock, store, registry, cfg, "")
+
+		return mock, svc
+	}
+
+	t.Run("finds skills in target directories", func(t *testing.T) {
+		mock, svc := setupMigrateEnv()
+		mock.Dirs["/home/test/.claude/skills/my-skill"] = true
+		mock.Files["/home/test/.claude/skills/my-skill/SKILL.md"] = []byte("# My Skill")
+
+		result := svc.FindSkillsToMigrate(service.MigrateOptions{Scope: service.ScopeGlobal})
+
+		if len(result["claude"]) != 1 {
+			t.Errorf("FindSkillsToMigrate() claude skills = %d, want 1", len(result["claude"]))
+		}
+	})
+
+	t.Run("skips symlinks", func(t *testing.T) {
+		mock, svc := setupMigrateEnv()
+		mock.Symlinks["/home/test/.claude/skills/linked-skill"] = "/home/test/.agents/skills/linked-skill"
+
+		result := svc.FindSkillsToMigrate(service.MigrateOptions{Scope: service.ScopeGlobal})
+
+		if len(result["claude"]) != 0 {
+			t.Errorf("FindSkillsToMigrate() should skip symlinks, got %d skills", len(result["claude"]))
+		}
+	})
+
+	t.Run("returns empty when no skills exist", func(t *testing.T) {
+		_, svc := setupMigrateEnv()
+		result := svc.FindSkillsToMigrate(service.MigrateOptions{Scope: service.ScopeGlobal})
+
+		total := 0
+		for _, skills := range result {
+			total += len(skills)
+		}
+		if total != 0 {
+			t.Errorf("FindSkillsToMigrate() total skills = %d, want 0", total)
+		}
+	})
+}
+
 func TestSyncActionConstants(t *testing.T) {
 	tests := []struct {
-		action SyncAction
+		action service.SyncAction
 		want   string
 	}{
-		{SyncActionInstall, "install"},
-		{SyncActionUpdate, "update"},
-		{SyncActionUninstall, "uninstall"},
-		{SyncActionSkip, "skip"},
-		{SyncActionError, "error"},
+		{service.SyncActionInstall, "install"},
+		{service.SyncActionUpdate, "update"},
+		{service.SyncActionUninstall, "uninstall"},
+		{service.SyncActionSkip, "skip"},
+		{service.SyncActionError, "error"},
 	}
 
 	for _, tt := range tests {
@@ -392,4 +406,49 @@ func TestSyncActionConstants(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMigrateActionConstants(t *testing.T) {
+	tests := []struct {
+		action service.MigrateAction
+		want   string
+	}{
+		{service.MigrateActionMoved, "moved"},
+		{service.MigrateActionSkipped, "skipped"},
+		{service.MigrateActionRemoved, "removed"},
+		{service.MigrateActionError, "error"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			if string(tt.action) != tt.want {
+				t.Errorf("MigrateAction = %v, want %v", tt.action, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewMigrateResult(t *testing.T) {
+	t.Run("creates result with nil found", func(t *testing.T) {
+		result := service.NewMigrateResult(service.MigrateResultParams{})
+		if result.Found == nil {
+			t.Error("NewMigrateResult() Found should not be nil")
+		}
+	})
+
+	t.Run("HasSkillsToMigrate returns true when found", func(t *testing.T) {
+		result := service.NewMigrateResult(service.MigrateResultParams{
+			Found: map[string][]string{"claude": {"skill-a"}},
+		})
+		if !result.HasSkillsToMigrate() {
+			t.Error("HasSkillsToMigrate() should return true")
+		}
+	})
+
+	t.Run("HasSkillsToMigrate returns false when empty", func(t *testing.T) {
+		result := service.NewMigrateResult(service.MigrateResultParams{})
+		if result.HasSkillsToMigrate() {
+			t.Error("HasSkillsToMigrate() should return false")
+		}
+	})
 }

@@ -1,11 +1,9 @@
-package skill
+package service
 
 import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/wwwyo/skillet/internal/fs"
 )
 
 // Scope represents the scope level of a skill.
@@ -124,11 +122,11 @@ const maxValidationDepth = 5
 
 // IsValidSkillDir checks if a directory is a valid skill directory.
 // A valid skill directory contains SKILL.md either directly or in a subdirectory.
-func IsValidSkillDir(fsys fs.System, dir string) bool {
+func IsValidSkillDir(fsys FileSystem, dir string) bool {
 	return isValidSkillDirWithDepth(fsys, dir, 0)
 }
 
-func isValidSkillDirWithDepth(fsys fs.System, dir string, depth int) bool {
+func isValidSkillDirWithDepth(fsys FileSystem, dir string, depth int) bool {
 	if depth > maxValidationDepth {
 		return false
 	}

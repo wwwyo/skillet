@@ -7,17 +7,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/config"
-	"github.com/wwwyo/skillet/internal/orchestrator"
-	"github.com/wwwyo/skillet/internal/skill"
-	"github.com/wwwyo/skillet/internal/target"
+	"github.com/wwwyo/skillet/internal/service"
 )
 
 const statusSeparator = "----------------------------------------"
 
 // newStatusCmd creates the status command.
 func newStatusCmd(a *app) *cobra.Command {
-	scopeFlags := NewScopeFlags(skill.ScopeProject)
+	scopeFlags := NewScopeFlags(service.ScopeProject)
 
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -27,18 +24,12 @@ func newStatusCmd(a *app) *cobra.Command {
 Displays which skills are installed, missing, or extra for each target.
 By default, shows status for all scopes. Use --global or --project to filter.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Find project root
-			projectRoot, err := config.FindProjectRoot(a.fs)
+			svc, err := a.newSkillService()
 			if err != nil {
-				projectRoot = ""
+				return err
 			}
 
-			store := skill.NewStore(a.fs, a.config, projectRoot)
-			registry := target.NewRegistry(a.fs, projectRoot, a.config)
-			orch := orchestrator.New(a.fs, store, registry, a.config, projectRoot)
-
-			// Build options
-			var opts orchestrator.GetStatusOptions
+			var opts service.GetStatusOptions
 			if scopeFlags.IsSet() {
 				scope, err := scopeFlags.GetScope()
 				if err != nil {
@@ -47,22 +38,19 @@ By default, shows status for all scopes. Use --global or --project to filter.`,
 				opts.Scope = &scope
 			}
 
-			statuses, err := orch.GetStatus(opts)
+			statuses, err := svc.GetStatus(opts)
 			if err != nil {
 				return fmt.Errorf("failed to get status: %w", err)
 			}
 
-			// Sort for consistent output
-			slices.SortFunc(statuses, func(a, b *orchestrator.Status) int {
+			slices.SortFunc(statuses, func(a, b *service.Status) int {
 				return cmp.Compare(a.Target, b.Target)
 			})
 
-			// Print each status
 			for _, status := range statuses {
 				printTargetStatus(status)
 			}
 
-			// Print summary
 			printStatusSummary(statuses)
 
 			return nil
@@ -75,7 +63,7 @@ By default, shows status for all scopes. Use --global or --project to filter.`,
 }
 
 // printTargetStatus prints the status for a single target.
-func printTargetStatus(status *orchestrator.Status) {
+func printTargetStatus(status *service.Status) {
 	fmt.Printf("\nTarget: %s\n", status.Target)
 	fmt.Println(statusSeparator)
 
@@ -107,7 +95,7 @@ func printSkillList(header string, skills []string, prefix string) {
 }
 
 // printStatusSummary prints a summary of all statuses.
-func printStatusSummary(statuses []*orchestrator.Status) {
+func printStatusSummary(statuses []*service.Status) {
 	if len(statuses) == 0 {
 		fmt.Println("\nNo targets found.")
 		return

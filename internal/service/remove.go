@@ -32,14 +32,10 @@ func (s *SkillService) Remove(opts RemoveOptions) *RemoveResult {
 		}
 	}
 
-	if err := s.store.Remove(sk); err != nil {
-		return NewRemoveResult(RemoveResultParams{
-			SkillName: sk.Name,
-			Scope:     sk.Scope,
-			Error:     fmt.Errorf("failed to remove from store: %w", err),
-		})
-	}
-
+	// Remove from targets first, before removing from store.
+	// This is important because targets may contain symlinks pointing to the store.
+	// If the store is deleted first, Exists() (which uses os.Stat and follows symlinks)
+	// will return false for broken symlinks, causing target cleanup to be skipped.
 	var targetResults []TargetRemoveResult
 	for _, t := range s.targets.GetAll() {
 		result := TargetRemoveResult{Target: t.Name()}
@@ -53,6 +49,14 @@ func (s *SkillService) Remove(opts RemoveOptions) *RemoveResult {
 		}
 
 		targetResults = append(targetResults, result)
+	}
+
+	if err := s.store.Remove(sk); err != nil {
+		return NewRemoveResult(RemoveResultParams{
+			SkillName: sk.Name,
+			Scope:     sk.Scope,
+			Error:     fmt.Errorf("failed to remove from store: %w", err),
+		})
 	}
 
 	return NewRemoveResult(RemoveResultParams{

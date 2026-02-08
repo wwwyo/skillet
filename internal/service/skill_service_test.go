@@ -306,6 +306,20 @@ func TestRemove(t *testing.T) {
 		if !result.StoreRemoved {
 			t.Error("Remove() should have removed from store")
 		}
+
+		// Verify targets were also cleaned up
+		for _, tr := range result.TargetResults {
+			if !tr.Removed {
+				t.Errorf("Remove() should have removed from target %s", tr.Target)
+			}
+		}
+
+		if mock.Exists("/home/test/.claude/skills/remove-me") {
+			t.Error("Remove() should have deleted skill from claude target")
+		}
+		if mock.Exists("/home/test/.codex/skills/remove-me") {
+			t.Error("Remove() should have deleted skill from codex target")
+		}
 	})
 
 	t.Run("remove non-existent skill", func(t *testing.T) {

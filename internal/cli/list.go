@@ -2,7 +2,8 @@ package cli
 
 import (
 	"fmt"
-	"strings"
+	"os"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -60,48 +61,30 @@ If neither is specified, shows all skills.`,
 	return cmd
 }
 
-// printSkillsByScope groups and displays skills by scope.
+// printSkillsByScope displays skills in a table format grouped by scope.
 func printSkillsByScope(skills []*service.Skill) {
-	grouped := make(map[service.Scope][]*service.Skill)
-	for _, s := range skills {
-		grouped[s.Scope] = append(grouped[s.Scope], s)
-	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
-	for _, scope := range []service.Scope{service.ScopeGlobal, service.ScopeProject} {
-		if scopeSkills := grouped[scope]; len(scopeSkills) > 0 {
-			printSkillSection(scope, scopeSkills)
+	fmt.Fprintf(w, "NAME\tSCOPE\tCATEGORY\tDESCRIPTION\n")
+	fmt.Fprintf(w, "----\t-----\t--------\t-----------\n")
+
+	for _, s := range skills {
+		category := "default"
+		if s.Category == service.CategoryOptional {
+			category = "optional"
 		}
+		desc := truncate(s.Description, 60)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, s.Scope, category, desc)
 	}
-	fmt.Println()
+
+	w.Flush()
 }
 
-// printSkillSection prints a single scope section.
-func printSkillSection(scope service.Scope, skills []*service.Skill) {
-	fmt.Printf("\n%s skills:\n", capitalizeFirst(scope.String()))
-	fmt.Println(strings.Repeat("-", 40))
-
-	for _, s := range skills {
-		printSkill(s)
-	}
-}
-
-// printSkill prints a single skill entry.
-func printSkill(s *service.Skill) {
-	categoryMark := ""
-	if s.Category == service.CategoryOptional {
-		categoryMark = " [optional]"
-	}
-	fmt.Printf("  %s%s\n", s.Name, categoryMark)
-
-	if s.Description != "" {
-		fmt.Printf("    %s\n", s.Description)
-	}
-}
-
-// capitalizeFirst capitalizes the first letter of a string.
-func capitalizeFirst(s string) string {
-	if len(s) == 0 {
+// truncate shortens a string to maxLen, appending "..." if truncated.
+func truncate(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
+	return string(runes[:maxLen]) + "..."
 }

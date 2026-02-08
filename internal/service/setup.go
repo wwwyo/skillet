@@ -35,11 +35,22 @@ func (s *SetupService) SetupGlobal(params SetupGlobalParams) (*Config, error) {
 		}
 	}
 
-	// Check if config already exists
+	// Update existing config with new params
 	if s.fs.Exists(params.ConfigPath) {
 		cfg, err := s.configStore.Load(params.ConfigPath)
 		if err != nil {
 			return nil, err
+		}
+		if params.GlobalPath != DefaultGlobalPath {
+			cfg.GlobalPath = params.GlobalPath
+		}
+		cfg.DefaultStrategy = params.Strategy
+		for name, target := range cfg.Targets {
+			target.Enabled = params.EnabledTargets[name]
+			cfg.Targets[name] = target
+		}
+		if err := s.configStore.Save(cfg, params.ConfigPath); err != nil {
+			return nil, fmt.Errorf("failed to update config file: %w", err)
 		}
 		return cfg, nil
 	}

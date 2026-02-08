@@ -88,6 +88,8 @@ func initializeGlobal(a *app, customPath string, skipPrompts bool) error {
 		return nil
 	}
 
+	existed := a.fs.Exists(configPath)
+
 	setupSvc := service.NewSetupService(a.fs, a.configStore)
 	cfg, err := setupSvc.SetupGlobal(service.SetupGlobalParams{
 		GlobalPath:     globalPath,
@@ -99,7 +101,7 @@ func initializeGlobal(a *app, customPath string, skipPrompts bool) error {
 		return err
 	}
 
-	if a.fs.Exists(configPath) {
+	if existed {
 		fmt.Printf("\n✓ Global configuration at %s\n", configPath)
 	} else {
 		fmt.Printf("\n✓ Created global configuration at %s\n", configPath)

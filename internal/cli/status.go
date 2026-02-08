@@ -24,9 +24,9 @@ func newStatusCmd(a *app) *cobra.Command {
 Displays which skills are installed, missing, or extra for each target.
 By default, shows status for all scopes. Use --global or --project to filter.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := a.newSkillService()
-			if err != nil {
-				return err
+			svc, rootErr := a.newSkillService()
+			if scopeFlags.Project && rootErr != nil {
+				return fmt.Errorf("not in a project directory")
 			}
 
 			var opts service.GetStatusOptions

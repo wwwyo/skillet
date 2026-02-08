@@ -25,9 +25,9 @@ This removes the skill from both the skillet store and all configured targets
 		Aliases: []string{"rm"},
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := a.newSkillService()
-			if err != nil {
-				return err
+			svc, rootErr := a.newSkillService()
+			if scopeFlags.Project && rootErr != nil {
+				return fmt.Errorf("not in a project directory")
 			}
 
 			opts := service.RemoveOptions{Name: args[0]}

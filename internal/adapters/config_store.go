@@ -25,18 +25,14 @@ func NewConfigStore(fs service.FileSystem) *ConfigStore {
 
 // Load loads the configuration from a file.
 func (s *ConfigStore) Load(path string) (*service.Config, error) {
+	var err error
 	if path == "" {
-		var err error
 		path, err = s.GlobalConfigPath()
-		if err != nil {
-			return nil, err
-		}
 	} else {
-		var err error
 		path, err = service.ExpandPath(s.fs, path)
-		if err != nil {
-			return nil, err
-		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	if !s.fs.Exists(path) {

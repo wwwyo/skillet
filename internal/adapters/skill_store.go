@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -230,10 +231,11 @@ func (s *SkillStore) findSkillFileWithDepth(dir string, depth int) string {
 	return ""
 }
 
+var frontmatterRegex = regexp.MustCompile(`(?s)^---\s*\n(.*?)\n---`)
+
 // parseFrontmatter extracts and parses YAML frontmatter from content.
 func parseFrontmatter(content string) (*skillMetadata, error) {
-	re := regexp.MustCompile(`(?s)^---\s*\n(.*?)\n---`)
-	matches := re.FindStringSubmatch(content)
+	matches := frontmatterRegex.FindStringSubmatch(content)
 
 	if len(matches) < 2 {
 		return nil, fmt.Errorf("no frontmatter found")
@@ -282,8 +284,9 @@ func (s *SkillStore) loadAllInDir(dir string, scope service.Scope) (defaultSkill
 		if name == optionalDir {
 			continue
 		}
-		skill, err := s.loadSkill(s.fs.Join(dir, name), scope, service.CategoryDefault)
-		if err != nil {
+		skill, loadErr := s.loadSkill(s.fs.Join(dir, name), scope, service.CategoryDefault)
+		if loadErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to load skill %q: %v\n", name, loadErr)
 			continue
 		}
 		defaultSkills = append(defaultSkills, skill)
@@ -296,8 +299,9 @@ func (s *SkillStore) loadAllInDir(dir string, scope service.Scope) (defaultSkill
 	}
 
 	for _, name := range optNames {
-		skill, err := s.loadSkill(s.fs.Join(optDir, name), scope, service.CategoryOptional)
-		if err != nil {
+		skill, loadErr := s.loadSkill(s.fs.Join(optDir, name), scope, service.CategoryOptional)
+		if loadErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to load optional skill %q: %v\n", name, loadErr)
 			continue
 		}
 		optionalSkills = append(optionalSkills, skill)

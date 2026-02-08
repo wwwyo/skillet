@@ -40,14 +40,16 @@ func newApp() *app {
 }
 
 // newSkillService creates a SkillService with standard wiring.
-func (a *app) newSkillService() (*service.SkillService, error) {
-	root, err := a.configStore.FindProjectRoot()
-	if err != nil {
+// Returns the service and a non-nil rootErr when the project root is not found.
+// Callers should check rootErr when project scope is required.
+func (a *app) newSkillService() (svc *service.SkillService, rootErr error) {
+	root, rootErr := a.configStore.FindProjectRoot()
+	if rootErr != nil {
 		root = ""
 	}
 	store := adapters.NewSkillStore(a.fs, a.config, root)
 	targets := adapters.NewRegistry(a.fs, root, a.config)
-	return service.NewSkillService(a.fs, store, targets, a.config, root), nil
+	return service.NewSkillService(a.fs, store, targets, a.config, root), rootErr
 }
 
 // newSkillStore creates a SkillStore and returns the project root.

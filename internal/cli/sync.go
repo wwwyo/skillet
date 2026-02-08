@@ -26,9 +26,9 @@ By default, syncs all skills to all enabled targets.
 Use --global or --project to sync only skills from a specific scope.
 Use --dry-run to see what would be done without making changes.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := a.newSkillService()
-			if err != nil {
-				return err
+			svc, rootErr := a.newSkillService()
+			if scopeFlags.Project && rootErr != nil {
+				return fmt.Errorf("not in a project directory")
 			}
 
 			opts := service.SyncOptions{

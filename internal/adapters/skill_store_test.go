@@ -291,12 +291,12 @@ func TestSkillStoreGetResolvedSorted(t *testing.T) {
 
 func TestSkillStoreLoadSkill(t *testing.T) {
 	tests := []struct {
-		name        string
-		setup       func(*MockFileSystem)
-		dir         string
-		wantName    string
-		wantDesc    string
-		wantErr     bool
+		name     string
+		setup    func(*MockFileSystem)
+		dir      string
+		wantName string
+		wantDesc string
+		wantErr  bool
 	}{
 		{
 			name: "load valid skill",

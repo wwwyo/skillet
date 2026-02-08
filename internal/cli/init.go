@@ -9,8 +9,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/config"
-	"github.com/wwwyo/skillet/internal/skill"
+	"github.com/wwwyo/skillet/internal/service"
 )
 
 var initGlobal bool
@@ -32,12 +31,10 @@ Use --project to initialize project-level configuration at ./.agents/
 
 If neither flag is specified, project initialization is assumed.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Default to project if neither specified
 			if !initGlobal && !initProject {
 				initProject = true
 			}
 
-			// Validate --path is only used with --global
 			if initPath != "" && !initGlobal {
 				return fmt.Errorf("--path can only be used with --global")
 			}
@@ -70,20 +67,18 @@ func initializeGlobal(a *app, customPath string, skipPrompts bool) error {
 	reader := bufio.NewReader(os.Stdin)
 
 	globalPath := promptGlobalPath(reader, customPath, skipPrompts)
-
 	enabledTargets := promptTargets(skipPrompts)
 	if err := validateTargets(enabledTargets); err != nil {
 		return err
 	}
-
 	strategy := promptStrategy(skipPrompts)
 
-	agentsDir, err := config.ExpandPath(a.fs, globalPath)
+	agentsDir, err := service.ExpandPath(a.fs, globalPath)
 	if err != nil {
 		return err
 	}
 
-	configPath, err := config.GlobalConfigPath(a.fs)
+	configPath, err := service.GlobalConfigPath(a.fs)
 	if err != nil {
 		return err
 	}
@@ -93,20 +88,30 @@ func initializeGlobal(a *app, customPath string, skipPrompts bool) error {
 		return nil
 	}
 
-	if err := createSkillsDirectories(a, agentsDir); err != nil {
-		return err
-	}
+	existed := a.fs.Exists(configPath)
 
-	cfg, err := saveGlobalConfig(a, configPath, globalPath, enabledTargets, strategy)
+	setupSvc := service.NewSetupService(a.fs, a.configStore)
+	cfg, err := setupSvc.SetupGlobal(service.SetupGlobalParams{
+		GlobalPath:     globalPath,
+		EnabledTargets: enabledTargets,
+		Strategy:       strategy,
+		ConfigPath:     configPath,
+	})
 	if err != nil {
 		return err
 	}
 
-	// Ask about migrating existing skills
+	if existed {
+		fmt.Printf("\n✓ Global configuration at %s\n", configPath)
+	} else {
+		fmt.Printf("\n✓ Created global configuration at %s\n", configPath)
+	}
+	fmt.Printf("✓ Initialized global skills at %s\n", strings.Replace(globalPath, "~", "$HOME", 1))
+
 	if err := runMigrate(a, cfg, migrateRunOptions{
 		skipPrompts:    skipPrompts,
-		defaultConfirm: false, // Destructive operation, default to no
-		scope:          skill.ScopeGlobal,
+		defaultConfirm: false,
+		scope:          service.ScopeGlobal,
 		projectRoot:    "",
 	}); err != nil {
 		return err
@@ -120,20 +125,20 @@ func promptGlobalPath(reader *bufio.Reader, customPath string, skipPrompts bool)
 		return customPath
 	}
 	if skipPrompts {
-		return config.DefaultGlobalPath
+		return service.DefaultGlobalPath
 	}
 
-	fmt.Printf("\nGlobal skills path [%s]: ", config.DefaultGlobalPath)
+	fmt.Printf("\nGlobal skills path [%s]: ", service.DefaultGlobalPath)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return config.DefaultGlobalPath
+		return service.DefaultGlobalPath
 	}
 	return input
 }
 
 func promptTargets(skipPrompts bool) map[string]bool {
-	defaultCfg := config.Default()
+	defaultCfg := service.DefaultConfig()
 	enabledTargets := make(map[string]bool)
 
 	if skipPrompts {
@@ -143,12 +148,11 @@ func promptTargets(skipPrompts bool) map[string]bool {
 		return enabledTargets
 	}
 
-	// Build options list
 	var options []string
 	var defaults []string
 	for name := range defaultCfg.Targets {
 		options = append(options, name)
-		defaults = append(defaults, name) // All selected by default
+		defaults = append(defaults, name)
 	}
 
 	var selected []string
@@ -162,7 +166,6 @@ func promptTargets(skipPrompts bool) map[string]bool {
 		os.Exit(1)
 	}
 
-	// Convert selected list to map
 	for _, name := range selected {
 		enabledTargets[name] = true
 	}
@@ -170,21 +173,21 @@ func promptTargets(skipPrompts bool) map[string]bool {
 	return enabledTargets
 }
 
-func promptStrategy(skipPrompts bool) config.Strategy {
+func promptStrategy(skipPrompts bool) service.Strategy {
 	if skipPrompts {
-		return config.StrategySymlink
+		return service.StrategySymlink
 	}
 
 	options := []string{
-		string(config.StrategySymlink),
-		string(config.StrategyCopy),
+		string(service.StrategySymlink),
+		string(service.StrategyCopy),
 	}
 
 	var selected string
 	prompt := &survey.Select{
 		Message: "Select sync strategy:",
 		Options: options,
-		Default: string(config.StrategySymlink),
+		Default: string(service.StrategySymlink),
 		Help:    "symlink: creates symbolic links (recommended), copy: copies files",
 	}
 
@@ -192,7 +195,7 @@ func promptStrategy(skipPrompts bool) config.Strategy {
 		os.Exit(1)
 	}
 
-	return config.Strategy(selected)
+	return service.Strategy(selected)
 }
 
 func validateTargets(enabledTargets map[string]bool) error {
@@ -204,7 +207,7 @@ func validateTargets(enabledTargets map[string]bool) error {
 	return fmt.Errorf("at least one target must be selected")
 }
 
-func confirmCreation(reader *bufio.Reader, configPath, agentsDir string, enabledTargets map[string]bool, strategy config.Strategy) bool {
+func confirmCreation(reader *bufio.Reader, configPath, agentsDir string, enabledTargets map[string]bool, strategy service.Strategy) bool {
 	fmt.Println()
 	fmt.Println("This will create:")
 	fmt.Printf("  Config: %s\n", configPath)
@@ -227,82 +230,28 @@ func confirmCreation(reader *bufio.Reader, configPath, agentsDir string, enabled
 	return confirm == "" || confirm == "y" || confirm == "yes"
 }
 
-func createSkillsDirectories(a *app, agentsDir string) error {
-	dirs := []string{
-		agentsDir,
-		a.fs.Join(agentsDir, config.SkillsDir),
-		a.fs.Join(agentsDir, config.SkillsDir, config.OptionalDir),
-	}
-
-	for _, dir := range dirs {
-		if err := a.fs.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-	}
-	return nil
-}
-
-func saveGlobalConfig(a *app, configPath, globalPath string, enabledTargets map[string]bool, strategy config.Strategy) (*config.Config, error) {
-	if a.fs.Exists(configPath) {
-		fmt.Printf("\n• Global configuration already exists at %s\n", configPath)
-		// Load and return existing config
-		return config.Load(a.fs, configPath)
-	}
-
-	cfg := config.Default()
-	if globalPath != config.DefaultGlobalPath {
-		cfg.GlobalPath = globalPath
-	}
-	cfg.DefaultStrategy = strategy
-
-	for name, target := range cfg.Targets {
-		target.Enabled = enabledTargets[name]
-		cfg.Targets[name] = target
-	}
-
-	if err := cfg.SaveTo(a.fs, configPath); err != nil {
-		return nil, fmt.Errorf("failed to create config file: %w", err)
-	}
-
-	fmt.Printf("\n✓ Created global configuration at %s\n", configPath)
-	fmt.Printf("✓ Initialized global skills at %s\n", strings.Replace(globalPath, "~", "$HOME", 1))
-	return cfg, nil
-}
-
 func initializeProject(a *app, skipPrompts bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	agentsDir := config.ProjectAgentsDir(cwd, a.fs)
-
-	// Create directory structure
-	dirs := []string{
-		agentsDir,
-		config.ProjectSkillsDir(cwd, a.fs, ""),
-		config.ProjectSkillsDir(cwd, a.fs, config.OptionalDir),
+	setupSvc := service.NewSetupService(a.fs, a.configStore)
+	if err := setupSvc.SetupProject(cwd); err != nil {
+		return err
 	}
 
-	for _, dir := range dirs {
-		if err := a.fs.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-	}
+	fmt.Printf("Initialized project skillet at %s\n", service.ProjectAgentsDir(cwd, a.fs))
 
-	fmt.Printf("Initialized project skillet at %s\n", agentsDir)
-
-	// Ask about migrating existing skills
-	cfg, err := config.Load(a.fs, "")
+	cfg, err := a.configStore.Load("")
 	if err != nil {
-		// Config not found, skip migration
 		return nil
 	}
 
 	if err := runMigrate(a, cfg, migrateRunOptions{
 		skipPrompts:    skipPrompts,
-		defaultConfirm: false, // Destructive operation, default to no
-		scope:          skill.ScopeProject,
+		defaultConfirm: false,
+		scope:          service.ScopeProject,
 		projectRoot:    cwd,
 	}); err != nil {
 		return err

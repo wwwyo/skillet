@@ -1,59 +1,45 @@
-package target
+package adapters
 
 import (
 	"fmt"
 
-	"github.com/wwwyo/skillet/internal/config"
-	"github.com/wwwyo/skillet/internal/fs"
-	"github.com/wwwyo/skillet/internal/skill"
+	"github.com/wwwyo/skillet/internal/service"
 )
 
-// InstallOptions contains options for installing a skill.
-type InstallOptions struct {
-	// Strategy specifies how to install (symlink or copy)
-	Strategy config.Strategy
-	// Force overwrites existing installations
-	Force bool
+// TargetDef defines default paths for a target.
+type TargetDef struct {
+	GlobalPath  string
+	ProjectPath string
+	SkillsDir   string
 }
 
-// Target represents an AI agent target for skill synchronization.
-type Target interface {
-	// Name returns the target name (e.g., "claude", "codex")
-	Name() string
-	// Install installs a skill to this target
-	Install(skill *skill.Skill, opts InstallOptions) error
-	// Uninstall removes a skill from this target
-	Uninstall(skillName string) error
-	// IsInstalled checks if a skill is installed
-	IsInstalled(skillName string) bool
-	// IsInstalledInScope checks if a skill is installed in a specific scope
-	IsInstalledInScope(skillName string, scope skill.Scope) bool
-	// GetInstalledPath returns the path where a skill is installed
-	GetInstalledPath(skillName string) string
-	// GetSkillsPath returns the skills directory path for the given scope
-	GetSkillsPath(scope skill.Scope) (string, error)
-	// ListInstalled returns all installed skills
-	ListInstalled() ([]string, error)
+// DefaultTargets contains default definitions for all supported targets.
+var DefaultTargets = map[string]TargetDef{
+	"claude": {GlobalPath: "~/.claude", ProjectPath: ".claude", SkillsDir: "skills"},
+	"codex":  {GlobalPath: "~/.codex", ProjectPath: ".codex", SkillsDir: "skills"},
 }
 
-// BaseTarget provides common functionality for targets.
+// BaseTarget implements service.Target.
 type BaseTarget struct {
 	name        string
 	globalPath  string
 	projectPath string
 	skillsDir   string
-	fs          fs.System
+	fs          service.FileSystem
 	projectRoot string
 }
 
+// Compile-time interface check.
+var _ service.Target = (*BaseTarget)(nil)
+
 // NewBaseTarget creates a new BaseTarget.
-func NewBaseTarget(name, globalPath, projectPath, skillsDir string, fsys fs.System, projectRoot string) *BaseTarget {
+func NewBaseTarget(name, globalPath, projectPath, skillsDir string, fs service.FileSystem, projectRoot string) *BaseTarget {
 	return &BaseTarget{
 		name:        name,
 		globalPath:  globalPath,
 		projectPath: projectPath,
 		skillsDir:   skillsDir,
-		fs:          fsys,
+		fs:          fs,
 		projectRoot: projectRoot,
 	}
 }
@@ -63,15 +49,15 @@ func (t *BaseTarget) Name() string {
 }
 
 // GetSkillsPath returns the skills directory path for the given scope.
-func (t *BaseTarget) GetSkillsPath(scope skill.Scope) (string, error) {
+func (t *BaseTarget) GetSkillsPath(scope service.Scope) (string, error) {
 	switch scope {
-	case skill.ScopeGlobal:
-		expanded, err := config.ExpandPath(t.fs, t.globalPath)
+	case service.ScopeGlobal:
+		expanded, err := service.ExpandPath(t.fs, t.globalPath)
 		if err != nil {
 			return "", err
 		}
 		return t.fs.Join(expanded, t.skillsDir), nil
-	case skill.ScopeProject:
+	case service.ScopeProject:
 		if t.projectRoot == "" {
 			return "", fmt.Errorf("project root not set")
 		}
@@ -82,18 +68,15 @@ func (t *BaseTarget) GetSkillsPath(scope skill.Scope) (string, error) {
 }
 
 // GetInstalledPath returns the path where a skill is installed (checks all scopes).
-// Returns empty string if not found.
 func (t *BaseTarget) GetInstalledPath(skillName string) string {
-	// Check project first (higher priority)
-	if path, err := t.GetSkillsPath(skill.ScopeProject); err == nil {
+	if path, err := t.GetSkillsPath(service.ScopeProject); err == nil {
 		fullPath := t.fs.Join(path, skillName)
 		if t.fs.Exists(fullPath) {
 			return fullPath
 		}
 	}
 
-	// Then check global
-	if path, err := t.GetSkillsPath(skill.ScopeGlobal); err == nil {
+	if path, err := t.GetSkillsPath(service.ScopeGlobal); err == nil {
 		fullPath := t.fs.Join(path, skillName)
 		if t.fs.Exists(fullPath) {
 			return fullPath
@@ -109,7 +92,7 @@ func (t *BaseTarget) IsInstalled(skillName string) bool {
 }
 
 // IsInstalledInScope checks if a skill is installed in the specified scope.
-func (t *BaseTarget) IsInstalledInScope(skillName string, scope skill.Scope) bool {
+func (t *BaseTarget) IsInstalledInScope(skillName string, scope service.Scope) bool {
 	path, err := t.GetSkillsPath(scope)
 	if err != nil {
 		return false
@@ -118,7 +101,7 @@ func (t *BaseTarget) IsInstalledInScope(skillName string, scope skill.Scope) boo
 }
 
 // Install installs a skill to this target.
-func (t *BaseTarget) Install(s *skill.Skill, opts InstallOptions) error {
+func (t *BaseTarget) Install(s *service.Skill, opts service.InstallOptions) error {
 	destDir, err := t.GetSkillsPath(s.Scope)
 	if err != nil {
 		return err
@@ -126,38 +109,31 @@ func (t *BaseTarget) Install(s *skill.Skill, opts InstallOptions) error {
 
 	destPath := t.fs.Join(destDir, s.Name)
 
-	// Check if already installed
 	if t.fs.Exists(destPath) {
 		if !opts.Force {
 			return fmt.Errorf("skill already installed: %s", s.Name)
 		}
-		// Remove existing
 		if err := t.fs.RemoveAll(destPath); err != nil {
 			return fmt.Errorf("failed to remove existing skill: %w", err)
 		}
 	}
 
-	// Ensure destination directory exists
 	if err := t.fs.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("failed to create skills directory: %w", err)
 	}
 
-	// Install based on strategy
 	switch opts.Strategy {
-	case config.StrategySymlink:
-		// Try symlink first
+	case service.StrategySymlink:
 		if err := t.fs.Symlink(s.Path, destPath); err != nil {
-			// Fallback to copy if symlink fails (e.g., cross-filesystem)
 			if err := t.fs.CopyDir(s.Path, destPath); err != nil {
 				return fmt.Errorf("failed to install skill: %w", err)
 			}
 		}
-	case config.StrategyCopy:
+	case service.StrategyCopy:
 		if err := t.fs.CopyDir(s.Path, destPath); err != nil {
 			return fmt.Errorf("failed to copy skill: %w", err)
 		}
 	default:
-		// Default to symlink with copy fallback
 		if err := t.fs.Symlink(s.Path, destPath); err != nil {
 			if err := t.fs.CopyDir(s.Path, destPath); err != nil {
 				return fmt.Errorf("failed to install skill: %w", err)
@@ -186,7 +162,6 @@ func (t *BaseTarget) Uninstall(skillName string) error {
 func (t *BaseTarget) ListInstalled() ([]string, error) {
 	skillSet := make(map[string]bool)
 
-	// Helper to add skills from a directory
 	addFromDir := func(dir string) error {
 		if dir == "" || !t.fs.Exists(dir) {
 			return nil
@@ -196,32 +171,81 @@ func (t *BaseTarget) ListInstalled() ([]string, error) {
 			return fmt.Errorf("failed to read skills directory: %w", err)
 		}
 		for _, entry := range entries {
-			if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 {
+			if entry.IsDir() || entry.Type()&service.ModeSymlink != 0 {
 				skillSet[entry.Name()] = true
 			}
 		}
 		return nil
 	}
 
-	// List from global path
-	if globalPath, err := t.GetSkillsPath(skill.ScopeGlobal); err == nil {
+	if globalPath, err := t.GetSkillsPath(service.ScopeGlobal); err == nil {
 		if err := addFromDir(globalPath); err != nil {
 			return nil, err
 		}
 	}
 
-	// List from project path
-	if projectPath, err := t.GetSkillsPath(skill.ScopeProject); err == nil {
+	if projectPath, err := t.GetSkillsPath(service.ScopeProject); err == nil {
 		if err := addFromDir(projectPath); err != nil {
 			return nil, err
 		}
 	}
 
-	// Convert to slice
 	skills := make([]string, 0, len(skillSet))
 	for name := range skillSet {
 		skills = append(skills, name)
 	}
 
 	return skills, nil
+}
+
+// Registry implements service.TargetRegistry.
+type Registry struct {
+	targets map[string]service.Target
+}
+
+// Compile-time interface check.
+var _ service.TargetRegistry = (*Registry)(nil)
+
+// NewRegistry creates a new Registry with default targets.
+func NewRegistry(fs service.FileSystem, projectRoot string, cfg *service.Config) *Registry {
+	r := &Registry{targets: make(map[string]service.Target)}
+
+	for name, def := range DefaultTargets {
+		if cfg != nil && !cfg.Targets[name].Enabled {
+			continue
+		}
+
+		globalPath := def.GlobalPath
+		if cfg != nil && cfg.Targets[name].GlobalPath != "" {
+			globalPath = cfg.Targets[name].GlobalPath
+		}
+
+		r.targets[name] = NewBaseTarget(name, globalPath, def.ProjectPath, def.SkillsDir, fs, projectRoot)
+	}
+
+	return r
+}
+
+// Get returns a target by name.
+func (r *Registry) Get(name string) (service.Target, bool) {
+	target, ok := r.targets[name]
+	return target, ok
+}
+
+// GetAll returns all registered targets.
+func (r *Registry) GetAll() []service.Target {
+	targets := make([]service.Target, 0, len(r.targets))
+	for _, t := range r.targets {
+		targets = append(targets, t)
+	}
+	return targets
+}
+
+// Names returns all registered target names.
+func (r *Registry) Names() []string {
+	names := make([]string, 0, len(r.targets))
+	for name := range r.targets {
+		names = append(names, name)
+	}
+	return names
 }

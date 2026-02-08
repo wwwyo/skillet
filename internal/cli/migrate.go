@@ -6,15 +6,13 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/config"
-	"github.com/wwwyo/skillet/internal/orchestrator"
-	"github.com/wwwyo/skillet/internal/skill"
-	"github.com/wwwyo/skillet/internal/target"
+	"github.com/wwwyo/skillet/internal/adapters"
+	"github.com/wwwyo/skillet/internal/service"
 )
 
 func newMigrateCmd(a *app) *cobra.Command {
 	var skipPrompts bool
-	scopeFlags := NewScopeFlags(skill.ScopeProject)
+	scopeFlags := NewScopeFlags(service.ScopeProject)
 
 	cmd := &cobra.Command{
 		Use:   "migrate",
@@ -35,14 +33,14 @@ Use this after setting up skillet to consolidate existing skills.`,
 				return err
 			}
 
-			cfg, err := config.Load(a.fs, "")
+			cfg, err := a.configStore.Load("")
 			if err != nil {
 				return fmt.Errorf("failed to load config: %w (run 'skillet init -g' first)", err)
 			}
 
 			projectRoot := ""
-			if scope == skill.ScopeProject {
-				projectRoot, err = config.FindProjectRoot(a.fs)
+			if scope == service.ScopeProject {
+				projectRoot, err = a.configStore.FindProjectRoot()
 				if err != nil {
 					return fmt.Errorf("failed to find project root: %w", err)
 				}
@@ -67,32 +65,29 @@ Use this after setting up skillet to consolidate existing skills.`,
 type migrateRunOptions struct {
 	skipPrompts    bool
 	defaultConfirm bool
-	scope          skill.Scope
+	scope          service.Scope
 	projectRoot    string
 }
 
-// runMigrate executes the migration logic. Exported for use by init command.
-func runMigrate(a *app, cfg *config.Config, opts migrateRunOptions) error {
-	store := skill.NewStore(a.fs, cfg, opts.projectRoot)
-	registry := target.NewRegistry(a.fs, opts.projectRoot, cfg)
-	orch := orchestrator.New(a.fs, store, registry, cfg, opts.projectRoot)
+// runMigrate executes the migration logic.
+func runMigrate(a *app, cfg *service.Config, opts migrateRunOptions) error {
+	store := adapters.NewSkillStore(a.fs, cfg, opts.projectRoot)
+	targets := adapters.NewRegistry(a.fs, opts.projectRoot, cfg)
+	svc := service.NewSkillService(a.fs, store, targets, cfg, opts.projectRoot)
 
-	migrateOpts := orchestrator.MigrateOptions{
+	migrateOpts := service.MigrateOptions{
 		Scope:       opts.scope,
 		ProjectRoot: opts.projectRoot,
 	}
 
-	// Find existing skills
-	existingSkills := orch.FindSkillsToMigrate(migrateOpts)
+	existingSkills := svc.FindSkillsToMigrate(migrateOpts)
 	if len(existingSkills) == 0 {
 		fmt.Println("No skills to migrate.")
 		return nil
 	}
 
-	// Show what was found
 	printFoundSkills(existingSkills)
 
-	// Ask for confirmation
 	if !opts.skipPrompts {
 		confirmed, err := promptMigrateConfirmation(opts.defaultConfirm)
 		if err != nil || !confirmed {
@@ -100,13 +95,11 @@ func runMigrate(a *app, cfg *config.Config, opts migrateRunOptions) error {
 		}
 	}
 
-	// Execute migration
-	result, err := orch.Migrate(migrateOpts, existingSkills)
+	result, err := svc.Migrate(migrateOpts, existingSkills)
 	if err != nil {
 		return fmt.Errorf("migration failed: %w", err)
 	}
 
-	// Print results
 	printMoveResults(result.MoveResults)
 	printMigrateSyncResults(result.SyncResults)
 
@@ -137,32 +130,32 @@ func promptMigrateConfirmation(defaultValue bool) (bool, error) {
 }
 
 // printMoveResults prints the results of moving skills.
-func printMoveResults(results []orchestrator.MoveResult) {
+func printMoveResults(results []service.MoveResult) {
 	if len(results) == 0 {
 		return
 	}
 
 	for _, r := range results {
 		switch r.Action {
-		case orchestrator.MigrateActionMoved:
+		case service.MigrateActionMoved:
 			fmt.Printf("  ✓ Moved %s to agents\n", r.SkillName)
-		case orchestrator.MigrateActionSkipped:
+		case service.MigrateActionSkipped:
 			fmt.Printf("  • Skipping %s (%s)\n", r.SkillName, r.Message)
-		case orchestrator.MigrateActionRemoved:
+		case service.MigrateActionRemoved:
 			// Silent for duplicates
-		case orchestrator.MigrateActionError:
+		case service.MigrateActionError:
 			fmt.Printf("  ⚠ Failed to process %s: %v\n", r.SkillName, r.Error)
 		}
 	}
 }
 
 // printMigrateSyncResults prints the sync results after migration.
-func printMigrateSyncResults(results []orchestrator.SyncResult) {
+func printMigrateSyncResults(results []service.SyncResult) {
 	fmt.Println("\nSynced to targets:")
 	for _, r := range results {
 		if r.Error != nil {
 			fmt.Printf("  ⚠ %s → %s: %v\n", r.SkillName, r.Target, r.Error)
-		} else if r.Action == orchestrator.SyncActionInstall || r.Action == orchestrator.SyncActionUpdate {
+		} else if r.Action == service.SyncActionInstall || r.Action == service.SyncActionUpdate {
 			fmt.Printf("  ✓ %s → %s\n", r.SkillName, r.Target)
 		}
 	}

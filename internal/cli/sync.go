@@ -6,10 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/config"
-	"github.com/wwwyo/skillet/internal/orchestrator"
-	"github.com/wwwyo/skillet/internal/skill"
-	"github.com/wwwyo/skillet/internal/target"
+	"github.com/wwwyo/skillet/internal/service"
 )
 
 // newSyncCmd creates the sync command.
@@ -18,7 +15,7 @@ func newSyncCmd(a *app) *cobra.Command {
 		dryRun bool
 		force  bool
 	)
-	scopeFlags := NewScopeFlags(skill.ScopeProject)
+	scopeFlags := NewScopeFlags(service.ScopeProject)
 
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -29,22 +26,16 @@ By default, syncs all skills to all enabled targets.
 Use --global or --project to sync only skills from a specific scope.
 Use --dry-run to see what would be done without making changes.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Find project root
-			projectRoot, err := config.FindProjectRoot(a.fs)
-			if err != nil {
-				projectRoot = ""
+			svc, rootErr := a.newSkillService()
+			if scopeFlags.Project && rootErr != nil {
+				return fmt.Errorf("not in a project directory")
 			}
 
-			store := skill.NewStore(a.fs, a.config, projectRoot)
-			registry := target.NewRegistry(a.fs, projectRoot, a.config)
-			orch := orchestrator.New(a.fs, store, registry, a.config, projectRoot)
-
-			opts := orchestrator.SyncOptions{
+			opts := service.SyncOptions{
 				DryRun: dryRun,
 				Force:  force,
 			}
 
-			// Set scope filter if specified
 			if scopeFlags.IsSet() {
 				scope, err := scopeFlags.GetScope()
 				if err != nil {
@@ -53,7 +44,7 @@ Use --dry-run to see what would be done without making changes.`,
 				opts.Scope = &scope
 			}
 
-			results, err := orch.Sync(opts)
+			results, err := svc.Sync(opts)
 			if err != nil {
 				return fmt.Errorf("sync failed: %w", err)
 			}
@@ -63,12 +54,11 @@ Use --dry-run to see what would be done without making changes.`,
 			}
 
 			// Group results by target
-			byTarget := make(map[string][]orchestrator.SyncResult)
+			byTarget := make(map[string][]service.SyncResult)
 			for _, r := range results {
 				byTarget[r.Target] = append(byTarget[r.Target], r)
 			}
 
-			// Sort target names for consistent output
 			targetNames := make([]string, 0, len(byTarget))
 			for name := range byTarget {
 				targetNames = append(targetNames, name)
@@ -83,18 +73,18 @@ Use --dry-run to see what would be done without making changes.`,
 
 				for _, r := range targetResults {
 					switch r.Action {
-					case orchestrator.SyncActionInstall:
+					case service.SyncActionInstall:
 						fmt.Printf("  + %s (install)\n", r.SkillName)
 						installs++
-					case orchestrator.SyncActionUpdate:
+					case service.SyncActionUpdate:
 						fmt.Printf("  ~ %s (update)\n", r.SkillName)
 						updates++
-					case orchestrator.SyncActionUninstall:
+					case service.SyncActionUninstall:
 						fmt.Printf("  - %s (uninstall)\n", r.SkillName)
 						uninstalls++
-					case orchestrator.SyncActionSkip:
+					case service.SyncActionSkip:
 						skips++
-					case orchestrator.SyncActionError:
+					case service.SyncActionError:
 						fmt.Printf("  ! %s (error: %v)\n", r.SkillName, r.Error)
 						errors++
 					}

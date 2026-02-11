@@ -51,7 +51,9 @@ If neither is specified, shows all skills.`,
 				return nil
 			}
 
-			printSkillsByScope(skills)
+			if err := printSkillsByScope(skills); err != nil {
+				return err
+			}
 			return nil
 		},
 	}
@@ -62,11 +64,15 @@ If neither is specified, shows all skills.`,
 }
 
 // printSkillsByScope displays skills in a table format grouped by scope.
-func printSkillsByScope(skills []*skill.Skill) {
+func printSkillsByScope(skills []*skill.Skill) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
-	fmt.Fprintf(w, "NAME\tSCOPE\tCATEGORY\tDESCRIPTION\n")
-	fmt.Fprintf(w, "----\t-----\t--------\t-----------\n")
+	if _, err := fmt.Fprintf(w, "NAME\tSCOPE\tCATEGORY\tDESCRIPTION\n"); err != nil {
+		return fmt.Errorf("failed to write table header: %w", err)
+	}
+	if _, err := fmt.Fprintf(w, "----\t-----\t--------\t-----------\n"); err != nil {
+		return fmt.Errorf("failed to write table separator: %w", err)
+	}
 
 	for _, s := range skills {
 		category := "default"
@@ -74,10 +80,16 @@ func printSkillsByScope(skills []*skill.Skill) {
 			category = "optional"
 		}
 		desc := truncate(s.Description, 60)
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, s.Scope, category, desc)
+		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, s.Scope, category, desc); err != nil {
+			return fmt.Errorf("failed to write skill row: %w", err)
+		}
 	}
 
-	w.Flush()
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("failed to flush output: %w", err)
+	}
+
+	return nil
 }
 
 // truncate shortens a string to maxLen, appending "..." if truncated.

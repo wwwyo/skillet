@@ -9,8 +9,9 @@ import (
 	"slices"
 	"strings"
 
-	platformfs "github.com/wwwyo/skillet/internal/platform/fs"
 	"gopkg.in/yaml.v3"
+
+	platformfs "github.com/wwwyo/skillet/internal/platform/fs"
 )
 
 // SkillsPathResolver resolves scope-specific skill root directories.

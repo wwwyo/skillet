@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	platformfs "github.com/wwwyo/skillet/internal/platform/fs"
 	"gopkg.in/yaml.v3"
+
+	platformfs "github.com/wwwyo/skillet/internal/platform/fs"
 )
 
 // Store manages config file persistence.

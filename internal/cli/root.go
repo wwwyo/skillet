@@ -7,8 +7,9 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
 
-	"github.com/wwwyo/skillet/internal/adapters"
-	"github.com/wwwyo/skillet/internal/service"
+	"github.com/wwwyo/skillet/internal/config"
+	platformfs "github.com/wwwyo/skillet/internal/platform/fs"
+	"github.com/wwwyo/skillet/internal/skill"
 )
 
 var (
@@ -25,38 +26,34 @@ func init() {
 
 // app represents the CLI application with its dependencies.
 type app struct {
-	fs          service.FileSystem
-	config      *service.Config
-	configStore service.ConfigStore
+	fs          platformfs.FileSystem
+	config      *config.Config
+	configStore *config.Store
 }
 
 // newApp creates a new app instance.
 func newApp() *app {
-	fs := adapters.NewFileSystem()
+	fsys := platformfs.NewFileSystem()
 	return &app{
-		fs:          fs,
-		configStore: adapters.NewConfigStore(fs),
+		fs:          fsys,
+		configStore: config.NewStore(fsys),
 	}
 }
 
-// newSkillService creates a SkillService with standard wiring.
-// Returns the service and a non-nil rootErr when the project root is not found.
-// Callers should check rootErr when project scope is required.
-func (a *app) newSkillService() (svc *service.SkillService, rootErr error) {
-	root, rootErr := a.configStore.FindProjectRoot()
+// findProjectRoot returns project root path when available.
+func (a *app) findProjectRoot() (root string, rootErr error) {
+	root, rootErr = a.configStore.FindProjectRoot()
 	if rootErr != nil {
-		root = ""
+		return "", rootErr
 	}
-	store := adapters.NewSkillStore(a.fs, a.config, root)
-	targets := adapters.NewRegistry(a.fs, root, a.config)
-	return service.NewSkillService(a.fs, store, targets, a.config, root), rootErr
+	return root, nil
 }
 
-// newSkillStore creates a SkillStore and returns the project root.
+// newSkillStore creates a skill.Store and returns the project root.
 // The caller can decide how to handle a missing project root.
-func (a *app) newSkillStore() (*adapters.SkillStore, string, error) {
-	root, err := a.configStore.FindProjectRoot()
-	return adapters.NewSkillStore(a.fs, a.config, root), root, err
+func (a *app) newSkillStore() (*skill.Store, string, error) {
+	root, err := a.findProjectRoot()
+	return skill.NewStore(a.fs, a.config, root), root, err
 }
 
 // newRootCmd creates the root command for skillet.
@@ -72,7 +69,7 @@ func newRootCmd(a *app) *cobra.Command {
 				if cmd.Name() != "init" && cmd.Name() != "migrate" {
 					return fmt.Errorf("failed to load config: %w", err)
 				}
-				cfg = service.DefaultConfig()
+				cfg = config.DefaultConfig()
 			}
 			a.config = cfg
 			return nil

@@ -5,12 +5,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/service"
+	"github.com/wwwyo/skillet/internal/skill"
+	"github.com/wwwyo/skillet/internal/usecase"
 )
 
 // newRemoveCmd creates the remove command.
 func newRemoveCmd(a *app) *cobra.Command {
-	scopeFlags := NewScopeFlags(service.ScopeProject)
+	scopeFlags := NewScopeFlags(skill.ScopeProject)
 
 	cmd := &cobra.Command{
 		Use:   "remove <name>",
@@ -25,12 +26,16 @@ This removes the skill from both the skillet store and all configured targets
 		Aliases: []string{"rm"},
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, rootErr := a.newSkillService()
+			root, rootErr := a.findProjectRoot()
+			if rootErr != nil {
+				root = ""
+			}
 			if scopeFlags.Project && rootErr != nil {
 				return fmt.Errorf("not in a project directory")
 			}
+			svc := usecase.NewRemoveService(a.fs, a.config, root)
 
-			opts := service.RemoveOptions{Name: args[0]}
+			opts := usecase.RemoveOptions{Name: args[0]}
 			if scopeFlags.IsSet() {
 				scope, err := scopeFlags.GetScope()
 				if err != nil {
@@ -56,7 +61,7 @@ This removes the skill from both the skillet store and all configured targets
 }
 
 // printRemoveResult prints the result of a remove operation.
-func printRemoveResult(result *service.RemoveResult) {
+func printRemoveResult(result *usecase.RemoveResult) {
 	fmt.Printf("Removed skill '%s' from %s scope\n", result.SkillName, result.Scope)
 
 	for _, tr := range result.TargetResults {

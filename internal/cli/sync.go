@@ -6,7 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/service"
+	"github.com/wwwyo/skillet/internal/skill"
+	"github.com/wwwyo/skillet/internal/usecase"
 )
 
 // newSyncCmd creates the sync command.
@@ -15,7 +16,7 @@ func newSyncCmd(a *app) *cobra.Command {
 		dryRun bool
 		force  bool
 	)
-	scopeFlags := NewScopeFlags(service.ScopeProject)
+	scopeFlags := NewScopeFlags(skill.ScopeProject)
 
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -26,12 +27,16 @@ By default, syncs all skills to all enabled targets.
 Use --global or --project to sync only skills from a specific scope.
 Use --dry-run to see what would be done without making changes.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, rootErr := a.newSkillService()
+			root, rootErr := a.findProjectRoot()
+			if rootErr != nil {
+				root = ""
+			}
 			if scopeFlags.Project && rootErr != nil {
 				return fmt.Errorf("not in a project directory")
 			}
+			svc := usecase.NewSyncService(a.fs, a.config, root)
 
-			opts := service.SyncOptions{
+			opts := usecase.SyncOptions{
 				DryRun: dryRun,
 				Force:  force,
 			}
@@ -53,8 +58,8 @@ Use --dry-run to see what would be done without making changes.`,
 				fmt.Println("Dry run - no changes made:")
 			}
 
-			// Group results by target
-			byTarget := make(map[string][]service.SyncResult)
+			// Group results by target.
+			byTarget := make(map[string][]usecase.SyncResult)
 			for _, r := range results {
 				byTarget[r.Target] = append(byTarget[r.Target], r)
 			}
@@ -73,18 +78,18 @@ Use --dry-run to see what would be done without making changes.`,
 
 				for _, r := range targetResults {
 					switch r.Action {
-					case service.SyncActionInstall:
+					case usecase.SyncActionInstall:
 						fmt.Printf("  + %s (install)\n", r.SkillName)
 						installs++
-					case service.SyncActionUpdate:
+					case usecase.SyncActionUpdate:
 						fmt.Printf("  ~ %s (update)\n", r.SkillName)
 						updates++
-					case service.SyncActionUninstall:
+					case usecase.SyncActionUninstall:
 						fmt.Printf("  - %s (uninstall)\n", r.SkillName)
 						uninstalls++
-					case service.SyncActionSkip:
+					case usecase.SyncActionSkip:
 						skips++
-					case service.SyncActionError:
+					case usecase.SyncActionError:
 						fmt.Printf("  ! %s (error: %v)\n", r.SkillName, r.Error)
 						errors++
 					}

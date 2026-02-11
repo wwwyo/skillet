@@ -1,4 +1,4 @@
-package adapters
+package fs
 
 import (
 	"fmt"
@@ -6,20 +6,15 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/wwwyo/skillet/internal/service"
 )
 
-// MockFileSystem implements service.FileSystem for testing purposes.
+// MockFileSystem implements FileSystem for testing purposes.
 type MockFileSystem struct {
 	Files    map[string][]byte
 	Dirs     map[string]bool
 	Symlinks map[string]string
 	HomeDir  string
 }
-
-// Compile-time interface check.
-var _ service.FileSystem = (*MockFileSystem)(nil)
 
 // NewMockFileSystem returns a new MockFileSystem.
 func NewMockFileSystem() *MockFileSystem {
@@ -66,7 +61,7 @@ func (m *MockFileSystem) Lstat(path string) (os.FileInfo, error) {
 	path = m.normalizePath(path)
 
 	if _, ok := m.Symlinks[path]; ok {
-		return &mockFileInfo{name: filepath.Base(path), isDir: false, mode: service.ModeSymlink}, nil
+		return &mockFileInfo{name: filepath.Base(path), isDir: false, mode: os.ModeSymlink}, nil
 	}
 	if _, ok := m.Files[path]; ok {
 		return &mockFileInfo{name: filepath.Base(path), isDir: false}, nil
@@ -345,7 +340,7 @@ func (m *mockDirEntry) Name() string { return m.name }
 func (m *mockDirEntry) IsDir() bool  { return m.isDir }
 func (m *mockDirEntry) Type() os.FileMode {
 	if m.isSymlink {
-		return service.ModeSymlink
+		return os.ModeSymlink
 	}
 	if m.isDir {
 		return os.ModeDir
@@ -355,7 +350,7 @@ func (m *mockDirEntry) Type() os.FileMode {
 func (m *mockDirEntry) Info() (os.FileInfo, error) {
 	mode := os.FileMode(0)
 	if m.isSymlink {
-		mode = service.ModeSymlink
+		mode = os.ModeSymlink
 	}
 	return &mockFileInfo{name: m.name, isDir: m.isDir, mode: mode}, nil
 }

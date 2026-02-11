@@ -6,13 +6,14 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/adapters"
-	"github.com/wwwyo/skillet/internal/service"
+	"github.com/wwwyo/skillet/internal/config"
+	"github.com/wwwyo/skillet/internal/skill"
+	"github.com/wwwyo/skillet/internal/usecase"
 )
 
 func newMigrateCmd(a *app) *cobra.Command {
 	var skipPrompts bool
-	scopeFlags := NewScopeFlags(service.ScopeProject)
+	scopeFlags := NewScopeFlags(skill.ScopeProject)
 
 	cmd := &cobra.Command{
 		Use:   "migrate",
@@ -39,7 +40,7 @@ Use this after setting up skillet to consolidate existing skills.`,
 			}
 
 			projectRoot := ""
-			if scope == service.ScopeProject {
+			if scope == skill.ScopeProject {
 				projectRoot, err = a.configStore.FindProjectRoot()
 				if err != nil {
 					return fmt.Errorf("failed to find project root: %w", err)
@@ -65,17 +66,16 @@ Use this after setting up skillet to consolidate existing skills.`,
 type migrateRunOptions struct {
 	skipPrompts    bool
 	defaultConfirm bool
-	scope          service.Scope
+	scope          skill.Scope
 	projectRoot    string
 }
 
 // runMigrate executes the migration logic.
-func runMigrate(a *app, cfg *service.Config, opts migrateRunOptions) error {
-	store := adapters.NewSkillStore(a.fs, cfg, opts.projectRoot)
-	targets := adapters.NewRegistry(a.fs, opts.projectRoot, cfg)
-	svc := service.NewSkillService(a.fs, store, targets, cfg, opts.projectRoot)
+func runMigrate(a *app, cfg *config.Config, opts migrateRunOptions) error {
+	syncSvc := usecase.NewSyncService(a.fs, cfg, opts.projectRoot)
+	svc := usecase.NewMigrateService(a.fs, cfg, opts.projectRoot, syncSvc)
 
-	migrateOpts := service.MigrateOptions{
+	migrateOpts := usecase.MigrateOptions{
 		Scope:       opts.scope,
 		ProjectRoot: opts.projectRoot,
 	}
@@ -130,32 +130,32 @@ func promptMigrateConfirmation(defaultValue bool) (bool, error) {
 }
 
 // printMoveResults prints the results of moving skills.
-func printMoveResults(results []service.MoveResult) {
+func printMoveResults(results []usecase.MigrateMoveResult) {
 	if len(results) == 0 {
 		return
 	}
 
 	for _, r := range results {
 		switch r.Action {
-		case service.MigrateActionMoved:
+		case usecase.MigrateActionMoved:
 			fmt.Printf("  ✓ Moved %s to agents\n", r.SkillName)
-		case service.MigrateActionSkipped:
+		case usecase.MigrateActionSkipped:
 			fmt.Printf("  • Skipping %s (%s)\n", r.SkillName, r.Message)
-		case service.MigrateActionRemoved:
-			// Silent for duplicates
-		case service.MigrateActionError:
+		case usecase.MigrateActionRemoved:
+			// Silent for duplicates.
+		case usecase.MigrateActionError:
 			fmt.Printf("  ⚠ Failed to process %s: %v\n", r.SkillName, r.Error)
 		}
 	}
 }
 
 // printMigrateSyncResults prints the sync results after migration.
-func printMigrateSyncResults(results []service.SyncResult) {
+func printMigrateSyncResults(results []usecase.SyncResult) {
 	fmt.Println("\nSynced to targets:")
 	for _, r := range results {
 		if r.Error != nil {
 			fmt.Printf("  ⚠ %s → %s: %v\n", r.SkillName, r.Target, r.Error)
-		} else if r.Action == service.SyncActionInstall || r.Action == service.SyncActionUpdate {
+		} else if r.Action == usecase.SyncActionInstall || r.Action == usecase.SyncActionUpdate {
 			fmt.Printf("  ✓ %s → %s\n", r.SkillName, r.Target)
 		}
 	}

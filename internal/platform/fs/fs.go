@@ -1,18 +1,39 @@
-package adapters
+package fs
 
 import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/wwwyo/skillet/internal/service"
 )
 
-// RealFileSystem implements service.FileSystem using the real file system.
-type RealFileSystem struct{}
+// FileSystem provides an abstraction over file system operations.
+type FileSystem interface {
+	ReadFile(path string) ([]byte, error)
+	WriteFile(path string, data []byte, perm os.FileMode) error
+	Stat(path string) (os.FileInfo, error)
+	Lstat(path string) (os.FileInfo, error)
+	Remove(path string) error
+	RemoveAll(path string) error
+	Rename(oldpath, newpath string) error
+	MkdirAll(path string, perm os.FileMode) error
+	ReadDir(path string) ([]os.DirEntry, error)
+	Exists(path string) bool
+	IsDir(path string) bool
+	IsSymlink(path string) bool
+	Symlink(oldname, newname string) error
+	Readlink(path string) (string, error)
+	CopyFile(src, dst string) error
+	CopyDir(src, dst string) error
+	Abs(path string) (string, error)
+	Rel(basepath, targpath string) (string, error)
+	Join(elem ...string) string
+	Dir(path string) string
+	Base(path string) string
+	UserHomeDir() (string, error)
+}
 
-// Compile-time interface check.
-var _ service.FileSystem = (*RealFileSystem)(nil)
+// RealFileSystem implements FileSystem using the real file system.
+type RealFileSystem struct{}
 
 // NewFileSystem returns a new RealFileSystem.
 func NewFileSystem() *RealFileSystem {

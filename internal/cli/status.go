@@ -7,14 +7,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/service"
+	"github.com/wwwyo/skillet/internal/skill"
+	"github.com/wwwyo/skillet/internal/usecase"
 )
 
 const statusSeparator = "----------------------------------------"
 
 // newStatusCmd creates the status command.
 func newStatusCmd(a *app) *cobra.Command {
-	scopeFlags := NewScopeFlags(service.ScopeProject)
+	scopeFlags := NewScopeFlags(skill.ScopeProject)
 
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -24,12 +25,16 @@ func newStatusCmd(a *app) *cobra.Command {
 Displays which skills are installed, missing, or extra for each target.
 By default, shows status for all scopes. Use --global or --project to filter.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, rootErr := a.newSkillService()
+			root, rootErr := a.findProjectRoot()
+			if rootErr != nil {
+				root = ""
+			}
 			if scopeFlags.Project && rootErr != nil {
 				return fmt.Errorf("not in a project directory")
 			}
+			svc := usecase.NewStatusService(a.fs, a.config, root)
 
-			var opts service.GetStatusOptions
+			var opts usecase.StatusOptions
 			if scopeFlags.IsSet() {
 				scope, err := scopeFlags.GetScope()
 				if err != nil {
@@ -43,7 +48,7 @@ By default, shows status for all scopes. Use --global or --project to filter.`,
 				return fmt.Errorf("failed to get status: %w", err)
 			}
 
-			slices.SortFunc(statuses, func(a, b *service.Status) int {
+			slices.SortFunc(statuses, func(a, b *usecase.StatusResult) int {
 				return cmp.Compare(a.Target, b.Target)
 			})
 
@@ -63,7 +68,7 @@ By default, shows status for all scopes. Use --global or --project to filter.`,
 }
 
 // printTargetStatus prints the status for a single target.
-func printTargetStatus(status *service.Status) {
+func printTargetStatus(status *usecase.StatusResult) {
 	fmt.Printf("\nTarget: %s\n", status.Target)
 	fmt.Println(statusSeparator)
 
@@ -95,7 +100,7 @@ func printSkillList(header string, skills []string, prefix string) {
 }
 
 // printStatusSummary prints a summary of all statuses.
-func printStatusSummary(statuses []*service.Status) {
+func printStatusSummary(statuses []*usecase.StatusResult) {
 	if len(statuses) == 0 {
 		fmt.Println("\nNo targets found.")
 		return

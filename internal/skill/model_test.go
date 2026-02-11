@@ -1,8 +1,6 @@
-package service
+package skill
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestValidateName(t *testing.T) {
 	tests := []struct {
@@ -91,11 +89,11 @@ func TestSkillPriority(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			skill, err := NewSkill("test", "", "", tt.scope, 0)
+			s, err := NewSkill("test", "", "", tt.scope, 0)
 			if err != nil {
 				t.Fatalf("NewSkill() error = %v", err)
 			}
-			if got := skill.Priority(); got != tt.want {
+			if got := s.Priority(); got != tt.want {
 				t.Errorf("Skill.Priority() = %v, want %v", got, tt.want)
 			}
 		})

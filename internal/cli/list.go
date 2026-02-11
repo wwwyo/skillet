@@ -7,12 +7,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wwwyo/skillet/internal/service"
+	"github.com/wwwyo/skillet/internal/skill"
 )
 
 // newListCmd creates the list command.
 func newListCmd(a *app) *cobra.Command {
-	scopeFlags := NewScopeFlags(service.ScopeProject)
+	scopeFlags := NewScopeFlags(skill.ScopeProject)
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -29,7 +29,7 @@ If neither is specified, shows all skills.`,
 				return fmt.Errorf("not in a project directory")
 			}
 
-			var skills []*service.Skill
+			var skills []*skill.Skill
 			var err error
 
 			if !scopeFlags.IsSet() {
@@ -62,7 +62,7 @@ If neither is specified, shows all skills.`,
 }
 
 // printSkillsByScope displays skills in a table format grouped by scope.
-func printSkillsByScope(skills []*service.Skill) {
+func printSkillsByScope(skills []*skill.Skill) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
 	fmt.Fprintf(w, "NAME\tSCOPE\tCATEGORY\tDESCRIPTION\n")
@@ -70,7 +70,7 @@ func printSkillsByScope(skills []*service.Skill) {
 
 	for _, s := range skills {
 		category := "default"
-		if s.Category == service.CategoryOptional {
+		if s.Category == skill.CategoryOptional {
 			category = "optional"
 		}
 		desc := truncate(s.Description, 60)

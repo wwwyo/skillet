@@ -1,6 +1,10 @@
-package service
+package config
 
-import "fmt"
+import (
+	"fmt"
+
+	platformfs "github.com/wwwyo/skillet/internal/platform/fs"
+)
 
 const (
 	// ConfigDir is the directory name for skillet configuration.
@@ -41,7 +45,13 @@ type Config struct {
 	Targets         map[string]TargetConfig `yaml:"targets"`
 }
 
-// Default returns the default configuration.
+// PathFS is the minimum filesystem contract needed for path resolution helpers.
+type PathFS interface {
+	Join(elem ...string) string
+	UserHomeDir() (string, error)
+}
+
+// DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
 		Version:         1,
@@ -61,7 +71,7 @@ func DefaultConfig() *Config {
 }
 
 // AgentsDir returns the expanded global agents directory path.
-func (c *Config) AgentsDir(fsys FileSystem) (string, error) {
+func (c *Config) AgentsDir(fsys PathFS) (string, error) {
 	path := c.GlobalPath
 	if path == "" {
 		path = DefaultGlobalPath
@@ -70,7 +80,7 @@ func (c *Config) AgentsDir(fsys FileSystem) (string, error) {
 }
 
 // SkillsDir returns the expanded global skills directory path.
-func (c *Config) SkillsDir(fsys FileSystem, category string) (string, error) {
+func (c *Config) SkillsDir(fsys PathFS, category string) (string, error) {
 	agentsDir, err := c.AgentsDir(fsys)
 	if err != nil {
 		return "", err
@@ -78,10 +88,20 @@ func (c *Config) SkillsDir(fsys FileSystem, category string) (string, error) {
 	return fsys.Join(agentsDir, SkillsDirName, category), nil
 }
 
+// GlobalSkillsDir resolves the global skills root directory.
+func (c *Config) GlobalSkillsDir(fsys platformfs.FileSystem) (string, error) {
+	return c.SkillsDir(fsys, "")
+}
+
+// ProjectSkillsDir resolves the project skills root directory.
+func (c *Config) ProjectSkillsDir(fsys platformfs.FileSystem, projectRoot string) string {
+	return ProjectSkillsDir(projectRoot, fsys, "")
+}
+
 // GetAgentsDir returns the agents directory for the given scope.
 // If projectRoot is non-empty, returns the project agents directory.
 // Otherwise, returns the global agents directory.
-func (c *Config) GetAgentsDir(fsys FileSystem, projectRoot string) (string, error) {
+func (c *Config) GetAgentsDir(fsys PathFS, projectRoot string) (string, error) {
 	if projectRoot != "" {
 		return ProjectAgentsDir(projectRoot, fsys), nil
 	}
@@ -89,17 +109,17 @@ func (c *Config) GetAgentsDir(fsys FileSystem, projectRoot string) (string, erro
 }
 
 // ProjectAgentsDir returns the path to the project agents directory.
-func ProjectAgentsDir(projectRoot string, fsys FileSystem) string {
+func ProjectAgentsDir(projectRoot string, fsys PathFS) string {
 	return fsys.Join(projectRoot, AgentsDirName)
 }
 
 // ProjectSkillsDir returns the path to the project skills directory.
-func ProjectSkillsDir(projectRoot string, fsys FileSystem, category string) string {
+func ProjectSkillsDir(projectRoot string, fsys PathFS, category string) string {
 	return fsys.Join(projectRoot, AgentsDirName, SkillsDirName, category)
 }
 
 // ExpandPath expands ~ in a path to the home directory.
-func ExpandPath(fsys FileSystem, path string) (string, error) {
+func ExpandPath(fsys PathFS, path string) (string, error) {
 	if len(path) == 0 {
 		return path, nil
 	}
@@ -116,7 +136,7 @@ func ExpandPath(fsys FileSystem, path string) (string, error) {
 }
 
 // GlobalConfigPath returns the path to the global config file (~/.config/skillet/config.yaml).
-func GlobalConfigPath(fsys FileSystem) (string, error) {
+func GlobalConfigPath(fsys PathFS) (string, error) {
 	home, err := fsys.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)

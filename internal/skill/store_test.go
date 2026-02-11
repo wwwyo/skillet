@@ -1,55 +1,51 @@
-package adapters
+package skill
 
 import (
 	"testing"
 
-	"github.com/wwwyo/skillet/internal/service"
+	"github.com/wwwyo/skillet/internal/config"
+	platformfs "github.com/wwwyo/skillet/internal/platform/fs"
 )
 
-// testConfig returns a default config for testing
-func testConfig() *service.Config {
-	return service.DefaultConfig()
-}
-
 // setupGlobalSkillsDir creates the global skills directory structure
-func setupGlobalSkillsDir(m *MockFileSystem) {
+func setupGlobalSkillsDir(m *platformfs.MockFileSystem) {
 	m.Dirs["/home/test/.agents"] = true
 	m.Dirs["/home/test/.agents/skills"] = true
 	m.Dirs["/home/test/.agents/skills/optional"] = true
 }
 
 // setupProjectSkillsDir creates the project skills directory structure
-func setupProjectSkillsDir(m *MockFileSystem, projectRoot string) {
+func setupProjectSkillsDir(m *platformfs.MockFileSystem, projectRoot string) {
 	m.Dirs[projectRoot+"/.agents"] = true
 	m.Dirs[projectRoot+"/.agents/skills"] = true
 	m.Dirs[projectRoot+"/.agents/skills/optional"] = true
 }
 
 // addSkillToMock adds a skill to the mock filesystem
-func addSkillToMock(m *MockFileSystem, dir, name, desc string) {
+func addSkillToMock(m *platformfs.MockFileSystem, dir, name, desc string) {
 	skillDir := dir + "/" + name
 	m.Dirs[skillDir] = true
 	content := "---\nname: " + name + "\ndescription: " + desc + "\n---\n"
 	m.Files[skillDir+"/SKILL.md"] = []byte(content)
 }
 
-func TestNewSkillStore(t *testing.T) {
-	mock := NewMockFileSystem()
-	store := NewSkillStore(mock, testConfig(), "/project")
+func TestNewStore(t *testing.T) {
+	mock := platformfs.NewMockFileSystem()
+	store := NewStore(mock, config.DefaultConfig(), "/project")
 
 	if store == nil {
-		t.Fatal("NewSkillStore() returned nil")
+		t.Fatal("NewStore() returned nil")
 	}
 	if store.fs != mock {
-		t.Error("NewSkillStore() fs not set correctly")
+		t.Error("NewStore() fs not set correctly")
 	}
 	if store.projectRoot != "/project" {
-		t.Errorf("NewSkillStore() projectRoot = %v, want %v", store.projectRoot, "/project")
+		t.Errorf("NewStore() projectRoot = %v, want %v", store.projectRoot, "/project")
 	}
 }
 
-func TestSkillStoreGetAll(t *testing.T) {
-	mock := NewMockFileSystem()
+func TestStoreGetAll(t *testing.T) {
+	mock := platformfs.NewMockFileSystem()
 	setupGlobalSkillsDir(mock)
 	setupProjectSkillsDir(mock, "/project")
 
@@ -58,7 +54,7 @@ func TestSkillStoreGetAll(t *testing.T) {
 	addSkillToMock(mock, "/project/.agents/skills", "project-default", "Project default skill")
 	addSkillToMock(mock, "/project/.agents/skills/optional", "project-optional", "Project optional skill")
 
-	store := NewSkillStore(mock, testConfig(), "/project")
+	store := NewStore(mock, config.DefaultConfig(), "/project")
 	skills, err := store.GetAll()
 
 	if err != nil {
@@ -82,12 +78,12 @@ func TestSkillStoreGetAll(t *testing.T) {
 	}
 }
 
-func TestSkillStoreGetAllWithoutProject(t *testing.T) {
-	mock := NewMockFileSystem()
+func TestStoreGetAllWithoutProject(t *testing.T) {
+	mock := platformfs.NewMockFileSystem()
 	setupGlobalSkillsDir(mock)
 	addSkillToMock(mock, "/home/test/.agents/skills", "global-skill", "A global skill")
 
-	store := NewSkillStore(mock, testConfig(), "")
+	store := NewStore(mock, config.DefaultConfig(), "")
 	skills, err := store.GetAll()
 
 	if err != nil {
@@ -99,18 +95,18 @@ func TestSkillStoreGetAllWithoutProject(t *testing.T) {
 	}
 }
 
-func TestSkillStoreGetByScope(t *testing.T) {
-	mock := NewMockFileSystem()
+func TestStoreGetByScope(t *testing.T) {
+	mock := platformfs.NewMockFileSystem()
 	setupGlobalSkillsDir(mock)
 	setupProjectSkillsDir(mock, "/project")
 
 	addSkillToMock(mock, "/home/test/.agents/skills", "global-skill", "Global skill")
 	addSkillToMock(mock, "/project/.agents/skills", "project-skill", "Project skill")
 
-	store := NewSkillStore(mock, testConfig(), "/project")
+	store := NewStore(mock, config.DefaultConfig(), "/project")
 
 	t.Run("get global scope", func(t *testing.T) {
-		skills, err := store.GetByScope(service.ScopeGlobal)
+		skills, err := store.GetByScope(ScopeGlobal)
 		if err != nil {
 			t.Fatalf("GetByScope(ScopeGlobal) error = %v", err)
 		}
@@ -123,7 +119,7 @@ func TestSkillStoreGetByScope(t *testing.T) {
 	})
 
 	t.Run("get project scope", func(t *testing.T) {
-		skills, err := store.GetByScope(service.ScopeProject)
+		skills, err := store.GetByScope(ScopeProject)
 		if err != nil {
 			t.Fatalf("GetByScope(ScopeProject) error = %v", err)
 		}
@@ -136,15 +132,15 @@ func TestSkillStoreGetByScope(t *testing.T) {
 	})
 
 	t.Run("unknown scope", func(t *testing.T) {
-		_, err := store.GetByScope(service.Scope(99))
+		_, err := store.GetByScope(Scope(99))
 		if err == nil {
 			t.Error("GetByScope(unknown) expected error, got nil")
 		}
 	})
 }
 
-func TestSkillStoreGetByName(t *testing.T) {
-	mock := NewMockFileSystem()
+func TestStoreGetByName(t *testing.T) {
+	mock := platformfs.NewMockFileSystem()
 	setupGlobalSkillsDir(mock)
 	setupProjectSkillsDir(mock, "/project")
 
@@ -152,28 +148,28 @@ func TestSkillStoreGetByName(t *testing.T) {
 	addSkillToMock(mock, "/project/.agents/skills", "shared-skill", "Project version")
 	addSkillToMock(mock, "/home/test/.agents/skills", "unique-skill", "Unique skill")
 
-	store := NewSkillStore(mock, testConfig(), "/project")
+	store := NewStore(mock, config.DefaultConfig(), "/project")
 
 	t.Run("get skill with priority (project wins)", func(t *testing.T) {
-		skill, err := store.GetByName("shared-skill")
+		sk, err := store.GetByName("shared-skill")
 		if err != nil {
 			t.Fatalf("GetByName() error = %v", err)
 		}
-		if skill.Scope != service.ScopeProject {
-			t.Errorf("GetByName() returned scope = %v, want project", skill.Scope)
+		if sk.Scope != ScopeProject {
+			t.Errorf("GetByName() returned scope = %v, want project", sk.Scope)
 		}
-		if skill.Description != "Project version" {
-			t.Errorf("GetByName() returned description = %v, want 'Project version'", skill.Description)
+		if sk.Description != "Project version" {
+			t.Errorf("GetByName() returned description = %v, want 'Project version'", sk.Description)
 		}
 	})
 
 	t.Run("get unique skill", func(t *testing.T) {
-		skill, err := store.GetByName("unique-skill")
+		sk, err := store.GetByName("unique-skill")
 		if err != nil {
 			t.Fatalf("GetByName() error = %v", err)
 		}
-		if skill.Name != "unique-skill" {
-			t.Errorf("GetByName() returned name = %v, want 'unique-skill'", skill.Name)
+		if sk.Name != "unique-skill" {
+			t.Errorf("GetByName() returned name = %v, want 'unique-skill'", sk.Name)
 		}
 	})
 
@@ -185,19 +181,19 @@ func TestSkillStoreGetByName(t *testing.T) {
 	})
 }
 
-func TestSkillStoreRemove(t *testing.T) {
+func TestStoreRemove(t *testing.T) {
 	t.Run("remove existing skill", func(t *testing.T) {
-		mock := NewMockFileSystem()
+		mock := platformfs.NewMockFileSystem()
 		setupGlobalSkillsDir(mock)
 		addSkillToMock(mock, "/home/test/.agents/skills", "to-remove", "Skill to remove")
 
-		store := NewSkillStore(mock, testConfig(), "")
-		s, err := store.FindInScope("to-remove", service.ScopeGlobal)
+		store := NewStore(mock, config.DefaultConfig(), "")
+		sk, err := store.FindInScope("to-remove", ScopeGlobal)
 		if err != nil {
 			t.Fatalf("FindInScope() error = %v", err)
 		}
 
-		err = store.Remove(s)
+		err = store.Remove(sk)
 		if err != nil {
 			t.Fatalf("Remove() error = %v", err)
 		}
@@ -208,12 +204,12 @@ func TestSkillStoreRemove(t *testing.T) {
 	})
 }
 
-func TestSkillStoreExists(t *testing.T) {
-	mock := NewMockFileSystem()
+func TestStoreExists(t *testing.T) {
+	mock := platformfs.NewMockFileSystem()
 	setupGlobalSkillsDir(mock)
 	addSkillToMock(mock, "/home/test/.agents/skills", "existing", "Existing skill")
 
-	store := NewSkillStore(mock, testConfig(), "")
+	store := NewStore(mock, config.DefaultConfig(), "")
 
 	if !store.Exists("existing") {
 		t.Error("Exists() returned false for existing skill")
@@ -224,8 +220,8 @@ func TestSkillStoreExists(t *testing.T) {
 	}
 }
 
-func TestSkillStoreGetResolved(t *testing.T) {
-	mock := NewMockFileSystem()
+func TestStoreGetResolved(t *testing.T) {
+	mock := platformfs.NewMockFileSystem()
 	setupGlobalSkillsDir(mock)
 	setupProjectSkillsDir(mock, "/project")
 
@@ -234,7 +230,7 @@ func TestSkillStoreGetResolved(t *testing.T) {
 	addSkillToMock(mock, "/home/test/.agents/skills", "global-only", "Global only")
 	addSkillToMock(mock, "/project/.agents/skills", "project-only", "Project only")
 
-	store := NewSkillStore(mock, testConfig(), "/project")
+	store := NewStore(mock, config.DefaultConfig(), "/project")
 	resolved, err := store.GetResolved()
 
 	if err != nil {
@@ -245,7 +241,7 @@ func TestSkillStoreGetResolved(t *testing.T) {
 		t.Errorf("GetResolved() returned %d skills, want 3", len(resolved))
 	}
 
-	var sharedSkill *service.Skill
+	var sharedSkill *Skill
 	for _, s := range resolved {
 		if s.Name == "shared-skill" {
 			sharedSkill = s
@@ -257,7 +253,7 @@ func TestSkillStoreGetResolved(t *testing.T) {
 		t.Fatal("GetResolved() did not return shared-skill")
 	}
 
-	if sharedSkill.Scope != service.ScopeProject {
+	if sharedSkill.Scope != ScopeProject {
 		t.Errorf("GetResolved() shared-skill scope = %v, want project", sharedSkill.Scope)
 	}
 
@@ -266,15 +262,15 @@ func TestSkillStoreGetResolved(t *testing.T) {
 	}
 }
 
-func TestSkillStoreGetResolvedSorted(t *testing.T) {
-	mock := NewMockFileSystem()
+func TestStoreGetResolvedSorted(t *testing.T) {
+	mock := platformfs.NewMockFileSystem()
 	setupGlobalSkillsDir(mock)
 
 	addSkillToMock(mock, "/home/test/.agents/skills", "zebra", "Zebra skill")
 	addSkillToMock(mock, "/home/test/.agents/skills", "alpha", "Alpha skill")
 	addSkillToMock(mock, "/home/test/.agents/skills", "beta", "Beta skill")
 
-	store := NewSkillStore(mock, testConfig(), "")
+	store := NewStore(mock, config.DefaultConfig(), "")
 	resolved, err := store.GetResolved()
 
 	if err != nil {
@@ -289,10 +285,10 @@ func TestSkillStoreGetResolvedSorted(t *testing.T) {
 	}
 }
 
-func TestSkillStoreLoadSkill(t *testing.T) {
+func TestStoreLoadSkill(t *testing.T) {
 	tests := []struct {
 		name     string
-		setup    func(*MockFileSystem)
+		setup    func(*platformfs.MockFileSystem)
 		dir      string
 		wantName string
 		wantDesc string
@@ -300,7 +296,7 @@ func TestSkillStoreLoadSkill(t *testing.T) {
 	}{
 		{
 			name: "load valid skill",
-			setup: func(m *MockFileSystem) {
+			setup: func(m *platformfs.MockFileSystem) {
 				m.Dirs["/skills/my-skill"] = true
 				m.Files["/skills/my-skill/SKILL.md"] = []byte("---\nname: my-skill\ndescription: A test skill\n---\n# My Skill\n")
 			},
@@ -310,7 +306,7 @@ func TestSkillStoreLoadSkill(t *testing.T) {
 		},
 		{
 			name: "missing SKILL.md",
-			setup: func(m *MockFileSystem) {
+			setup: func(m *platformfs.MockFileSystem) {
 				m.Dirs["/skills/no-skill"] = true
 			},
 			dir:     "/skills/no-skill",
@@ -318,7 +314,7 @@ func TestSkillStoreLoadSkill(t *testing.T) {
 		},
 		{
 			name: "invalid frontmatter",
-			setup: func(m *MockFileSystem) {
+			setup: func(m *platformfs.MockFileSystem) {
 				m.Dirs["/skills/invalid"] = true
 				m.Files["/skills/invalid/SKILL.md"] = []byte("No frontmatter here\n")
 			},
@@ -329,11 +325,11 @@ func TestSkillStoreLoadSkill(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := NewMockFileSystem()
+			mock := platformfs.NewMockFileSystem()
 			tt.setup(mock)
-			store := NewSkillStore(mock, testConfig(), "")
+			store := NewStore(mock, config.DefaultConfig(), "")
 
-			skill, err := store.loadSkill(tt.dir, service.ScopeGlobal, service.CategoryDefault)
+			sk, err := store.loadSkill(tt.dir, ScopeGlobal, CategoryDefault)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("loadSkill() expected error, got nil")
@@ -343,19 +339,19 @@ func TestSkillStoreLoadSkill(t *testing.T) {
 			if err != nil {
 				t.Fatalf("loadSkill() unexpected error: %v", err)
 			}
-			if skill.Name != tt.wantName {
-				t.Errorf("loadSkill() Name = %v, want %v", skill.Name, tt.wantName)
+			if sk.Name != tt.wantName {
+				t.Errorf("loadSkill() Name = %v, want %v", sk.Name, tt.wantName)
 			}
-			if skill.Description != tt.wantDesc {
-				t.Errorf("loadSkill() Description = %v, want %v", skill.Description, tt.wantDesc)
+			if sk.Description != tt.wantDesc {
+				t.Errorf("loadSkill() Description = %v, want %v", sk.Description, tt.wantDesc)
 			}
 		})
 	}
 }
 
-func TestSkillStoreLoadAllInDir(t *testing.T) {
+func TestStoreLoadAllInDir(t *testing.T) {
 	t.Run("load default and optional skills", func(t *testing.T) {
-		mock := NewMockFileSystem()
+		mock := platformfs.NewMockFileSystem()
 		mock.Dirs["/skills"] = true
 		mock.Dirs["/skills/skill-a"] = true
 		mock.Files["/skills/skill-a/SKILL.md"] = []byte("---\nname: skill-a\n---\n")
@@ -365,8 +361,8 @@ func TestSkillStoreLoadAllInDir(t *testing.T) {
 		mock.Dirs["/skills/optional/skill-c"] = true
 		mock.Files["/skills/optional/skill-c/SKILL.md"] = []byte("---\nname: skill-c\n---\n")
 
-		store := NewSkillStore(mock, testConfig(), "")
-		defaultSkills, optionalSkills, err := store.loadAllInDir("/skills", service.ScopeGlobal)
+		store := NewStore(mock, config.DefaultConfig(), "")
+		defaultSkills, optionalSkills, err := store.loadAllInDir("/skills", ScopeGlobal)
 
 		if err != nil {
 			t.Fatalf("loadAllInDir() error = %v", err)

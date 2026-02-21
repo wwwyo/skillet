@@ -23,8 +23,13 @@ jobs:
       - name: Build
         run: go build -v ./...
 
-      - name: Test
-        run: go test -v -race -coverprofile=coverage.out ./...
+      - name: Unit Test
+        run: |
+          PKGS=$(go list ./... | grep -v '/e2e$')
+          go test -race -coverprofile=coverage.out ${PKGS}
+
+      - name: E2E Test
+        run: go test -race ./e2e
 
   lint:
     runs-on: ubuntu-latest
